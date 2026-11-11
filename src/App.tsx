@@ -1,35 +1,23 @@
-﻿import { useEffect, useReducer, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { petReducer } from './petState'
+import { FocusTimer } from './FocusTimer'
+import { useProgress } from './useProgress'
 import { ACTIVITY_CATEGORIES, dailySummary, FEED_COST, FIRST_MILESTONE_XP, isActivityCategory, isValidDuration, isValidGoal, localDateKey, MAX_NOTE_LENGTH, MIN_FOCUS_GOAL, MAX_FOCUS_GOAL } from './rewards'
 import type { ActivityCategory } from './rewards'
-import { loadPet, savePet } from './storage'
 import './App.css'
 
 function App() {
-  const [loaded] = useState(loadPet)
-  const [pet, dispatch] = useReducer(petReducer, loaded.pet)
-  const [storageNotice, setStorageNotice] = useState(loaded.notice)
+  const { pet, dispatch, storageNotice, canPersist, busy } = useProgress()
   const [duration, setDuration] = useState('')
   const [category, setCategory] = useState<ActivityCategory>('Focus')
   const [note, setNote] = useState('')
   const [noteError, setNoteError] = useState('')
-  const [goal, setGoal] = useState(String(loaded.pet.dailyFocusGoal))
+  const [goal, setGoal] = useState(String(pet.dailyFocusGoal))
   const [goalError, setGoalError] = useState('')
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
   const [reaction, setReaction] = useState<{ mood: string } | null>(null)
   const [today, setToday] = useState(() => new Date())
-
-  useEffect(() => {
-    const saved = savePet(pet)
-    let active = true
-    // Report storage results after the write, outside rendering and reducer updates.
-    void Promise.resolve().then(() => {
-      if (active && !saved) setStorageNotice((previous) => previous || 'Progress cannot be saved on this device right now.')
-    })
-    return () => { active = false }
-  }, [pet])
 
   useEffect(() => {
     function refreshDay() {
@@ -52,16 +40,17 @@ function App() {
     return () => window.clearTimeout(timeout)
   }, [reaction])
 
-  function logActivity(event: FormEvent<HTMLFormElement>) {
+  async function logActivity(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const minutes = Number(duration)
     const validDuration = /^\d+$/.test(duration.trim()) && isValidDuration(minutes)
     setError(validDuration ? '' : 'Enter a whole number of minutes from 1 to 240.')
     setNoteError(note.length <= MAX_NOTE_LENGTH ? '' : 'Keep your note to 200 characters or fewer.')
     if (!validDuration || note.length > MAX_NOTE_LENGTH) return
-    dispatch({ type: 'log', activity: {
-      id: crypto.randomUUID(), category, duration: minutes, note: note.trim(), timestamp: new Date().toISOString(),
+    const changed = await dispatch({ type: 'log', activity: {
+      id: crypto.randomUUID(), source: 'Manual', category, duration: minutes, note: note.trim(), timestamp: new Date().toISOString(),
     } })
+    if (!changed) { setFeedback('This activity could not be added. Please try again.'); return }
     setDuration('')
     setNote('')
     setError('')
@@ -75,21 +64,23 @@ function App() {
     setFeedback(`${minutes} ${category.toLowerCase()} minutes saved. ${messages[category]}`)
   }
 
-  function saveGoal(event: FormEvent<HTMLFormElement>) {
+  async function saveGoal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const minutes = Number(goal)
     if (!/^\d+$/.test(goal.trim()) || !isValidGoal(minutes)) {
       setGoalError('Enter a whole number of minutes from 15 to 480.')
       return
     }
-    dispatch({ type: 'goal', minutes })
+    const changed = await dispatch({ type: 'goal', minutes })
+    if (!changed) { setFeedback('The goal could not be updated. Please try again.'); return }
     setGoalError('')
     setFeedback(`Daily focus goal saved: ${minutes} minutes. Your XP and food credits are unchanged.`)
   }
 
-  function feed() {
+  async function feed() {
     if (pet.foodCredits < FEED_COST) return
-    dispatch({ type: 'feed' })
+    const changed = await dispatch({ type: 'feed' })
+    if (!changed) { setFeedback('Mochi needs 2 available food credits for a treat.'); return }
     setReaction({ mood: 'Feeling happy ♡' })
     setFeedback('Yum! Mochi loved that little treat. Thank you for taking care of me!')
   }
@@ -108,7 +99,7 @@ function App() {
             <h1 id="welcome-heading">Meet Mochi.</h1>
             <p className="welcome-description">A little focus, a little rest, and a bunny by your side.</p>
           </div>
-          <button className="adopt-button" type="button" onClick={() => dispatch({ type: 'adopt' })}>
+          <button className="adopt-button" type="button" disabled={busy} onClick={() => void dispatch({ type: 'adopt' })}>
             Adopt Mochi ♡
           </button>
           {storageNotice && <p className="storage-notice" role="status">{storageNotice}</p>}
@@ -139,16 +130,17 @@ function App() {
             <label className="milestone-label" htmlFor="xp-progress">First milestone · 100 XP</label>
             <progress id="xp-progress" max={FIRST_MILESTONE_XP} value={Math.min(pet.xp, FIRST_MILESTONE_XP)} />
             <p className="help-text">{pet.xp >= FIRST_MILESTONE_XP ? 'First milestone reached! Look at you two grow.' : `${FIRST_MILESTONE_XP - pet.xp} XP to your first milestone.`}</p>
-            <button className="adopt-button" type="button" disabled={pet.foodCredits < FEED_COST} onClick={feed} aria-describedby="feeding-help">
+            <button className="adopt-button" type="button" disabled={busy || pet.foodCredits < FEED_COST} onClick={() => void feed()} aria-describedby="feeding-help">
               Feed Mochi · {FEED_COST} credits
             </button>
             <p id="feeding-help" className="help-text">Log 15 minutes of focus to earn 2 food credits for a treat.</p>
             <p className="feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
           </section>
           <div className="focus-column">
+            <FocusTimer session={pet.timer} dispatch={dispatch} canPersist={canPersist} busy={busy} />
             <section className="panel summary-card" aria-labelledby="summary-heading">
               <h2 id="summary-heading">Today’s activity</h2>
-              <p className="help-text">Manually logged minutes · your local calendar day</p>
+              <p className="help-text">Saved activity minutes · your local calendar day</p>
               <dl className="daily-summary">
                 {ACTIVITY_CATEGORIES.map((item) => <div key={item}><dt>{item}</dt><dd>{summary[item]} <span>min</span></dd></div>)}
               </dl>
@@ -179,17 +171,17 @@ function App() {
                   aria-invalid={Boolean(noteError)} aria-describedby={`note-help${noteError ? ' note-error' : ''}`} />
                 <p id="note-help" className="help-text">{note.length} / {MAX_NOTE_LENGTH} characters</p>
                 {noteError && <p id="note-error" className="field-error" role="alert">{noteError}</p>}
-                <button className="adopt-button" type="submit">Save activity ♡</button>
+                <button className="adopt-button" type="submit" disabled={busy}>Save activity ♡</button>
               </form>
               <p className="reward-note">Only Focus earns rewards: every 15 minutes in a local calendar day earns 5 XP + 2 food credits. Partial focus minutes add up across entries. Rewards cover the first 240 focus minutes each day; all logged time still counts. Leisure, Rest, and Neutral never subtract XP or credits.</p>
             </section>
             <section className="panel activity-card" aria-labelledby="activity-heading">
               <h2 id="activity-heading">Recent activities</h2>
-              {pet.activities.length === 0 ? <p className="empty-state">A fresh little start. Your manually logged activities will appear here.</p> : (
+              {pet.activities.length === 0 ? <p className="empty-state">A fresh little start. Your saved activities will appear here.</p> : (
                 <ul className="activity-list">
                   {recentActivities.map((activity) => (
                     <li key={activity.id}>
-                      <div><strong>{activity.category} · {activity.duration} minutes</strong><span>Manually logged</span>{activity.note && <p className="activity-note">{activity.note}</p>}</div>
+                      <div><strong>{activity.category} · {activity.duration} minutes</strong><span>{activity.source}</span>{activity.note && <p className="activity-note">{activity.note}</p>}</div>
                       <time dateTime={activity.timestamp}>{new Date(activity.timestamp).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
                     </li>
                   ))}
@@ -206,7 +198,7 @@ function App() {
                   aria-invalid={Boolean(goalError)} aria-describedby={`goal-help goal-range${goalError ? ' goal-error' : ''}`} />
                 <p id="goal-range" className="help-text">Whole minutes, from 15 to 480. Default: 60.</p>
                 {goalError && <p id="goal-error" className="field-error" role="alert">{goalError}</p>}
-                <button className="adopt-button" type="submit">Save daily goal ♡</button>
+                <button className="adopt-button" type="submit" disabled={busy}>Save daily goal ♡</button>
               </form>
             </section>
           </div>

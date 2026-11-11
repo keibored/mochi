@@ -2,12 +2,13 @@
 
 Mochi is a kawaii productivity companion: a little focus, a little rest, and a bunny by your side.
 
-The main React + TypeScript web application is being built first, using Vite. Complete the main web app before starting the Chrome extension. The Chrome extension and backend are later phases; neither is implemented. There is currently no authentication, timer, automatic activity tracking, or external service integration.
+The main React + TypeScript web application is being built first, using Vite. Complete the main web app before starting the Chrome extension. The Chrome extension and backend are later phases; neither is implemented. There is currently no authentication, automatic activity tracking, or external service integration.
 
 ## Current features
 
 - A responsive pink-and-cream welcome screen, adoption flow, and emoji bunny dashboard.
 - Manual activity logging for Focus, Leisure, Rest, and Neutral: whole durations of 1–240 minutes and optional notes up to 200 characters.
+- A persistent Focus Timer with 1–120 whole-minute sessions (default 25), Start, Pause, Resume, confirmed cancellation, and an explicit Save session action after completion. History distinguishes Manual and Timer entries.
 - Today's local-calendar-day totals by category, plus the five most recent activities with local timestamps and notes. All entries are retained in storage.
 - Focus rewards: each accumulated 15-minute block within a local calendar day earns 5 XP and 2 food credits. Partial minutes carry across entries that day. Only the first 240 focus minutes per day earn rewards; additional time still appears in totals. Other categories never subtract XP or credits.
 - Feeding costs 2 food credits, preserves XP, and briefly makes Mochi happy. Insufficient credits disable feeding.
@@ -56,11 +57,25 @@ No environment variables are currently required. Local `.env` files are ignored 
 
 ## Persistence and limitations
 
-The app stores one version-2 JSON record under `mochi.progress` in `localStorage`. It includes adoption, pet name, XP, food credits, activities (IDs, categories, durations, notes, and ISO timestamps), and the daily focus goal. Version-1 focus-only records migrate to Focus entries with empty notes and a default goal without replaying rewards or changing saved balances.
+The app stores one version-3 JSON record under `mochi.progress` in `localStorage`. It includes adoption, pet name, XP, food credits, activities (IDs, sources, categories, durations, notes, and ISO timestamps), the daily focus goal, and the active timer session. Version-1 focus-only records migrate to Focus entries with empty notes and a default goal. Version-1 and version-2 entries become Manual entries. Migration preserves IDs, timestamps, adoption, notes, goals, XP, and spent food credits without replaying rewards.
 
-Progress belongs to the current browser profile and origin (scheme, host, and port). Different devices, browsers, or local server ports do not share it. Clearing site data removes it; private browsing or browser policies may prevent persistence. There is no server backup, account sync, export, or multi-tab conflict resolution. Simultaneous tabs may overwrite each other's valid progress. Activity history grows in the record and can eventually reach browser storage limits.
+Progress belongs to the current browser profile and origin (scheme, host, and port). Different devices, browsers, or local server ports do not share it. Clearing site data removes it; private browsing or browser policies may prevent persistence. There is no server backup, account sync, or export. Activity history grows in the record and can eventually reach browser storage limits.
 
 Unavailable storage shows a warning and leaves the app usable for the session. Malformed or unsupported records are preserved rather than overwritten; the app shows a fresh session and cannot save it over that unreadable data. Daily grouping uses the device's current local calendar and timezone. There is no automatic time tracking, and saved data is not protected against manual editing.
+
+### Timer behavior and safety
+
+A running timer continues while the page is closed, the device sleeps, or the tab is in the background. Remaining time is calculated from wall-clock timestamps, not by counting interval ticks. Pause stores only the elapsed running time; paused time never counts. Reloading restores running, paused, and completed-but-unsaved sessions. Changing the device clock can affect elapsed time. This is a personal elapsed-time tool, not verification that you were working; it does not inspect browser activity.
+
+Completion displays **Focus session complete ♡**. Time and rewards are added only when you choose **Save session**. Saving creates one Focus activity through the same partial-minute and daily-cap reward calculations used for manual entries. Cancel asks for confirmation and adds no activity or rewards, including for completed-but-unsaved sessions.
+
+For this increment, the entire saved session is attributed to its calculated **completion date in the current local timezone**, rather than its start date or the date you click Save. A session that crosses midnight belongs entirely to the day it finishes; it is not split between days. Returning the next day to save it does not move it to that later day. Manual entries continue to use their logging timestamp.
+
+Each timer has a stable ID, also used as its saved activity ID. All progress mutations (including manual logs, feeding, goals, and timer actions) run under a shared Web Lock and read the newest record before writing. This prevents concurrent Mochi tabs from starting multiple active timers, resurrecting a saved session from stale state, or saving/rewarding one session twice. Tabs refresh from storage events and when brought back into view. Clearing or manually editing browser storage and unrelated older app versions are outside this guarantee.
+
+The timer requires available `localStorage` and Web Locks support in a secure context, such as localhost or HTTPS. If either is unavailable, timer controls are disabled with an explanation and manual logging remains usable in memory. After a storage failure, the tab stays session-only until reload to avoid overwriting saved progress with unsaved changes. Reload when storage is available again to restore the last successfully saved record.
+
+To try the flow locally, adopt Mochi if needed, set a 1-minute timer, Start, Pause, refresh, Resume, and wait for completion. Save once and confirm a Timer entry appears, then refresh or open another Mochi tab to verify it stays a single entry. One minute alone earns no reward; a fresh 30-minute saved session earns 10 XP and 4 credits. Try Cancel and Keep session, then confirm cancellation on another session and verify no activity is added. Manual logging and feeding remain available alongside the timer.
 
 ## Git and GitHub workflow
 

@@ -15,6 +15,7 @@ export type ActivityCategory = typeof ACTIVITY_CATEGORIES[number]
 
 export interface Activity {
   id: string
+  source: 'Manual' | 'Timer'
   category: ActivityCategory
   duration: number
   note: string
@@ -33,6 +34,8 @@ export function isActivity(value: unknown): value is Activity {
   if (typeof value !== 'object' || value === null) return false
   const activity = value as Partial<Activity>
   if (typeof activity.id !== 'string' || !activity.id.trim() ||
+      (activity.source !== 'Manual' && activity.source !== 'Timer') ||
+      (activity.source === 'Timer' && activity.category !== 'Focus') ||
       !isActivityCategory(activity.category) || typeof activity.duration !== 'number' ||
       !isValidDuration(activity.duration) || typeof activity.note !== 'string' ||
       activity.note.length > MAX_NOTE_LENGTH || typeof activity.timestamp !== 'string') return false
