@@ -42,8 +42,10 @@ export function petReducer(state: PetState, action: PetAction): PetState {
     const timer = state.timer
     if (!timer || timer.id !== action.id || !Number.isSafeInteger(action.now) || action.now < 0) return state
     if (action.type === 'timer-cancel') return { ...state, timer: null }
-    if (action.type === 'timer-pause') return { ...state, timer: pauseTimer(timer, action.now) }
-    if (action.type === 'timer-resume') return { ...state, timer: resumeTimer(timer, action.now) }
+    if (action.type === 'timer-pause' || action.type === 'timer-resume') {
+      const next = action.type === 'timer-pause' ? pauseTimer(timer, action.now) : resumeTimer(timer, action.now)
+      return next === timer ? state : { ...state, timer: next }
+    }
     const completedAt = completionTime(timer, action.now)
     if (completedAt === null) return state
     const logged = petReducer(state, { type: 'log', activity: {

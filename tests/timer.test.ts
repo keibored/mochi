@@ -33,7 +33,8 @@ function storageFixture(initial: PetState) {
       return result
     },
   } } })
-  return { raw: () => raw, rejectWrites: () => { rejectWrites = true }, allowWrites: () => { rejectWrites = false } }
+  return { raw: () => raw, replace: (pet: PetState) => { raw = JSON.stringify(pet) },
+    rejectWrites: () => { rejectWrites = true }, allowWrites: () => { rejectWrites = false } }
 }
 
 test('timer duration validation and single active session', () => {
@@ -197,4 +198,67 @@ test('timer saving fails safely without cross-tab locks', async () => {
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: {} })
   await assert.rejects(transactPet({ type: 'timer-save', id: 'timer-test', now: start + 60_000 }))
   assert.equal(readPet().activities.length, 0)
+})
+
+test('delayed lock responses return newer other-tab progress instead of stale snapshots', async () => {
+  const fixture = storageFixture(begin(30))
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { locks: {
+    request: async <T>(_name: string, callback: () => T) => {
+      const response = callback()
+      // Simulate another tab taking the released lock before our response is
+      // delivered. Its storage event could already have refreshed our UI.
+      fixture.replace(petReducer(readPet(), { type: 'feed' }))
+      return response
+    },
+  } } })
+  const result = await transactPet({ type: 'timer-save', id: 'timer-test', now: start + 30 * 60_000 })
+  assert.equal(result.changed, true)
+  assert.deepEqual([result.pet.xp, result.pet.foodCredits, result.pet.activities.length], [10, 2, 1])
+  assert.deepEqual(result.pet, readPet())
+})
+
+test('stale timer actions are read-only even when storage refuses writes', async () => {
+  const saved = act(begin(30), 'timer-save', start + 30 * 60_000)
+  const fixture = storageFixture(saved)
+  const before = fixture.raw()
+  fixture.rejectWrites()
+  for (const type of ['timer-save', 'timer-cancel', 'timer-pause', 'timer-resume'] as const) {
+    const result = await transactPet({ type, id: 'timer-test', now: start + 30 * 60_000 })
+    assert.equal(result.changed, false)
+    assert.deepEqual(result.pet, saved)
+  }
+  assert.equal(fixture.raw(), before)
+})
+
+test('repeated pause/resume and pausing a completed session do not rewrite progress', async () => {
+  const running = begin(1)
+  const paused = act(running, 'timer-pause', start + 10_000)
+  assert.equal(act(running, 'timer-resume', start + 10_000), running)
+  assert.equal(act(paused, 'timer-pause', start + 20_000), paused)
+  assert.equal(act(running, 'timer-pause', start + 60_000), running)
+  const fixture = storageFixture(paused)
+  fixture.rejectWrites()
+  const result = await transactPet({ type: 'timer-pause', id: 'timer-test', now: start + 20_000 })
+  assert.equal(result.changed, false)
+  assert.deepEqual(result.pet, paused)
+})
+
+test('a read failure after a committed save must not report failure or replay rewards', async () => {
+  const initial = begin(30)
+  let raw = JSON.stringify(initial)
+  let failRead = false
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage: {
+    getItem: () => {
+      if (failRead) throw new Error('Read blocked after commit')
+      return raw
+    },
+    setItem: (_key: string, value: string) => { raw = value; failRead = true },
+  } } })
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { locks: {
+    request: async <T>(_name: string, callback: () => T) => callback(),
+  } } })
+  const result = await transactPet({ type: 'timer-save', id: 'timer-test', now: start + 30 * 60_000 })
+  assert.equal(result.changed, true)
+  assert.deepEqual([result.pet.xp, result.pet.foodCredits, result.pet.activities.length], [10, 4, 1])
+  assert.deepEqual(JSON.parse(raw), result.pet)
 })

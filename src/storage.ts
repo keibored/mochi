@@ -80,10 +80,19 @@ export function savePet(pet: PetState): boolean {
 // Never write a stale React snapshot from an effect or another tab.
 export async function transactPet(action: PetAction): Promise<{ pet: PetState; changed: boolean }> {
   if (!navigator.locks) throw new Error('Safe shared storage is unavailable.')
-  return navigator.locks.request('mochi.progress.update', () => {
+  const result = await navigator.locks.request('mochi.progress.update', () => {
     const previous = readPet()
     const next = petReducer(previous, action)
-    if (!savePet(next)) throw new Error('Progress cannot be saved.')
+    if (next !== previous && !savePet(next)) throw new Error('Progress cannot be saved.')
     return { pet: next, changed: next !== previous }
   })
+  // A different tab may have committed after releasing our lock but before
+  // this response reached the UI. Do not replace its newer snapshot with ours.
+  try {
+    return { ...result, pet: readPet() }
+  } catch {
+    // The mutation already committed. A later read failure must not trigger
+    // an in-memory replay of that action or report a successful save as failed.
+    return result
+  }
 }
