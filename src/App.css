@@ -202,3 +202,22 @@ form label:not(:first-child) { margin-top: 20px; }
   .activity-list li { flex-direction: column; }
   .activity-list time { flex-basis: auto; text-align: left; }
 }
+
+.timer-card h2 { margin-top: 12px; }
+.timer-countdown {
+  margin: 24px 0 12px;
+  color: #784456;
+  text-align: center;
+  font-size: clamp(2.75rem, 8vw, 4rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+.timer-status { text-align: center; font-weight: 650; }
+.timer-controls { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+.timer-controls .adopt-button { flex: 1 1 130px; margin: 0; padding-inline: 20px; }
+.secondary-button { background: #fff6f8; }
+.secondary-button:hover:not(:disabled) { background: #fce5ed; }
+.timer-cancel { padding: 16px; margin: 16px 0; border: 1px solid #d9acba; border-radius: 16px; background: #fff6f8; }
+.timer-cancel p { margin-top: 0; font-size: 0.875rem; }
+.timer-cancel .timer-controls { margin-bottom: 0; }

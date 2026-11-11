@@ -9,7 +9,7 @@ import { isPetState, loadPet, migratePet, savePet, STORAGE_KEY } from '../src/st
 process.env.TZ = 'Asia/Manila'
 const noon = new Date(2026, 10, 11, 12)
 const entry = (duration: number, date = noon, id = 'entry-1', category: ActivityCategory = 'Focus'): Activity =>
-  ({ id, category, duration, note: '', timestamp: date.toISOString() })
+  ({ id, source: 'Manual', category, duration, note: '', timestamp: date.toISOString() })
 
 test('10 minutes followed by 5 minutes carries the partial block', () => {
   assert.deepEqual(rewardsForEntry([], 10, noon), { xp: 0, credits: 0 })
@@ -71,7 +71,7 @@ test('adoption, logging and repeated feeds use immutable updates and never negat
 test('saved record validates activity IDs, durations, timestamps and balances', () => {
   const valid = { ...freshPet(), adopted: true, activities: [entry(30)], xp: 10, foodCredits: 2 }
   assert.equal(isPetState(valid), true)
-  for (const invalid of [null, {}, { ...valid, version: 3 }, { ...valid, foodCredits: -1 },
+  for (const invalid of [null, {}, { ...valid, version: 4 }, { ...valid, foodCredits: -1 },
     { ...valid, xp: 1.5 }, { ...valid, activities: [entry(0)] },
     { ...valid, activities: [entry(30), entry(30)] },
     { ...valid, activities: [{ ...entry(30), timestamp: 'invalid' }] },
@@ -140,11 +140,12 @@ test('version-1 migration preserves progress without replaying rewards', () => {
   const legacy = { version: 1, adopted: true, name: 'Mochi', xp: 10, foodCredits: 2, activities: [legacyEntry] }
   const snapshot = JSON.stringify(legacy)
   const migrated = migratePet(legacy)!
-  assert.equal(migrated.version, 2)
+  assert.equal(migrated.version, 3)
+  assert.equal(migrated.timer, null)
   assert.equal(migrated.dailyFocusGoal, 60)
   assert.equal(migrated.adopted, true)
   assert.deepEqual([migrated.xp, migrated.foodCredits], [10, 2])
-  assert.deepEqual(migrated.activities, [{ ...legacyEntry, category: 'Focus', note: '' }])
+  assert.deepEqual(migrated.activities, [{ ...legacyEntry, source: 'Manual', category: 'Focus', note: '' }])
   assert.equal(JSON.stringify(legacy), snapshot)
   assert.deepEqual(migratePet(migrated), migrated)
   const next = petReducer(migrated, { type: 'log', activity: entry(15, noon, 'new-id') })
@@ -165,7 +166,7 @@ test('migration through storage retains spent credits and writes the updated ver
   assert.equal(savePet(loaded.pet), true)
   assert.deepEqual(loadPet().pet, loaded.pet)
   assert.deepEqual([loadPet().pet.xp, loadPet().pet.foodCredits], [10, 2])
-  assert.equal(JSON.parse(raw).version, 2)
+  assert.equal(JSON.parse(raw).version, 3)
 })
 
 test('daily category summaries switch at local midnight', () => {

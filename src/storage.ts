@@ -1,6 +1,7 @@
-﻿import { freshPet } from './petState.ts'
-import type { PetState } from './petState.ts'
+﻿import { freshPet, petReducer } from './petState.ts'
+import type { PetAction, PetState } from './petState.ts'
 import { DEFAULT_FOCUS_GOAL, isActivity, isValidGoal } from './rewards.ts'
+import { isTimerSession } from './timer.ts'
 
 export const STORAGE_KEY = 'mochi.progress'
 
@@ -9,60 +10,80 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isPetState(value: unknown): value is PetState {
-  if (!isRecord(value) || value.version !== 2 || typeof value.adopted !== 'boolean' ||
+  if (!isRecord(value) || value.version !== 3 || typeof value.adopted !== 'boolean' ||
       value.name !== 'Mochi' || typeof value.xp !== 'number' || !Number.isSafeInteger(value.xp) || value.xp < 0 ||
       typeof value.foodCredits !== 'number' || !Number.isSafeInteger(value.foodCredits) || value.foodCredits < 0 ||
       typeof value.dailyFocusGoal !== 'number' || !isValidGoal(value.dailyFocusGoal) ||
-      !Array.isArray(value.activities)) return false
+      !Array.isArray(value.activities) || (value.timer !== null && !isTimerSession(value.timer))) return false
   const ids = new Set<string>()
-  return value.activities.every((activity: unknown) => {
+  const validActivities = value.activities.every((activity: unknown) => {
     if (!isActivity(activity) || ids.has(activity.id)) return false
     ids.add(activity.id)
     return true
   })
+  return validActivities && (value.timer === null || (value.adopted && !ids.has(value.timer.id)))
 }
 
-// Migrate structure only. Existing balances are authoritative; never replay rewards.
+// Structural migration only: saved balances remain authoritative.
 export function migratePet(value: unknown): PetState | null {
-  if (!isRecord(value) || (value.version !== 1 && value.version !== 2)) return null
+  if (!isRecord(value) || (value.version !== 1 && value.version !== 2 && value.version !== 3)) return null
   let activities = value.activities
   if (value.version === 1) {
     if (!Array.isArray(activities)) return null
     activities = activities.map((entry: unknown) => isRecord(entry)
       ? { ...entry, category: 'Focus', note: '' } : entry)
   }
+  if (value.version !== 3) {
+    if (!Array.isArray(activities)) return null
+    activities = activities.map((entry: unknown) => isRecord(entry) ? { ...entry, source: 'Manual' } : entry)
+  }
   const candidate = {
     ...value,
-    version: 2,
+    version: 3,
+    timer: value.version === 3 ? value.timer : null,
     dailyFocusGoal: value.dailyFocusGoal === undefined ? DEFAULT_FOCUS_GOAL : value.dailyFocusGoal,
     activities,
   }
   return isPetState(candidate) ? candidate : null
 }
 
+export function readPet(): PetState {
+  const raw = window.localStorage.getItem(STORAGE_KEY)
+  if (raw === null) return freshPet()
+  const pet = migratePet(JSON.parse(raw))
+  if (!pet) throw new Error('Saved progress could not be read; it has been preserved.')
+  return pet
+}
+
 export function loadPet(): { pet: PetState; notice: string } {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (raw === null) return { pet: freshPet(), notice: '' }
-    const migrated = migratePet(JSON.parse(raw))
-    if (migrated) return { pet: migrated, notice: '' }
-  } catch (error) {
-    if (!(error instanceof SyntaxError)) {
-      return { pet: freshPet(), notice: 'Progress cannot be saved on this device right now.' }
-    }
+    return { pet: readPet(), notice: '' }
+  } catch {
+    return { pet: freshPet(), notice: 'Saved progress could not be read or is unavailable. Existing data is preserved; progress in this session cannot be saved.' }
   }
-  return { pet: freshPet(), notice: 'Saved progress could not be read and has been preserved. Progress in this session cannot be saved.' }
 }
 
 export function savePet(pet: PetState): boolean {
   try {
     if (!isPetState(pet)) return false
     const previous = window.localStorage.getItem(STORAGE_KEY)
-    // Preserve malformed or unsupported records rather than overwriting user data.
+    // Preserve malformed or unsupported records rather than overwriting them.
     if (previous !== null && !migratePet(JSON.parse(previous))) return false
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(pet))
     return true
   } catch {
     return false
   }
+}
+
+// All app mutations share one lock and read the latest record inside it.
+// Never write a stale React snapshot from an effect or another tab.
+export async function transactPet(action: PetAction): Promise<{ pet: PetState; changed: boolean }> {
+  if (!navigator.locks) throw new Error('Safe shared storage is unavailable.')
+  return navigator.locks.request('mochi.progress.update', () => {
+    const previous = readPet()
+    const next = petReducer(previous, action)
+    if (!savePet(next)) throw new Error('Progress cannot be saved.')
+    return { pet: next, changed: next !== previous }
+  })
 }
