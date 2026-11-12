@@ -3,19 +3,22 @@ import type { PetAction, PetState } from './petState.ts'
 import { DEFAULT_FOCUS_GOAL, isActivity, isValidGoal } from './rewards.ts'
 import { isTimerSession } from './timer.ts'
 import { areWebsiteRules } from './websiteRules.ts'
+import { freshWebSync, isWebSyncState } from './integration/syncDomain.ts'
 
 export const STORAGE_KEY = 'mochi.progress'
+export class ProgressValidationError extends Error {}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export function isPetState(value: unknown): value is PetState {
-  if (!isRecord(value) || value.version !== 4 || typeof value.adopted !== 'boolean' ||
+  if (!isRecord(value) || value.version !== 5 || typeof value.adopted !== 'boolean' ||
       value.name !== 'Mochi' || typeof value.xp !== 'number' || !Number.isSafeInteger(value.xp) || value.xp < 0 ||
       typeof value.foodCredits !== 'number' || !Number.isSafeInteger(value.foodCredits) || value.foodCredits < 0 ||
       typeof value.dailyFocusGoal !== 'number' || !isValidGoal(value.dailyFocusGoal) ||
-      !Array.isArray(value.activities) || !areWebsiteRules(value.websiteRules) ||
+      !Array.isArray(value.activities) || !areWebsiteRules(value.websiteRules) || !isWebSyncState(value.extensionSync) ||
+      (!value.adopted && value.extensionSync.authorityStartedAt !== null) ||
       (value.timer !== null && !isTimerSession(value.timer))) return false
   const ids = new Set<string>()
   const validActivities = value.activities.every((activity: unknown) => {
@@ -28,7 +31,7 @@ export function isPetState(value: unknown): value is PetState {
 
 // Structural migration only: saved balances remain authoritative.
 export function migratePet(value: unknown): PetState | null {
-  if (!isRecord(value) || (value.version !== 1 && value.version !== 2 && value.version !== 3 && value.version !== 4)) return null
+  if (!isRecord(value) || ![1, 2, 3, 4, 5].includes(value.version as number)) return null
   let activities = value.activities
   if (value.version === 1) {
     if (!Array.isArray(activities)) return null
@@ -41,9 +44,10 @@ export function migratePet(value: unknown): PetState | null {
   }
   const candidate = {
     ...value,
-    version: 4,
-    timer: value.version === 3 || value.version === 4 ? value.timer : null,
-    websiteRules: value.version === 4 ? value.websiteRules : [],
+    version: 5,
+    timer: value.version === 3 || value.version === 4 || value.version === 5 ? value.timer : null,
+    websiteRules: value.version === 4 || value.version === 5 ? value.websiteRules : [],
+    extensionSync: value.version === 5 ? value.extensionSync : freshWebSync(),
     dailyFocusGoal: value.dailyFocusGoal === undefined ? DEFAULT_FOCUS_GOAL : value.dailyFocusGoal,
     activities,
   }
@@ -85,7 +89,10 @@ export async function transactPet(action: PetAction): Promise<{ pet: PetState; c
   if (!navigator.locks) throw new Error('Safe shared storage is unavailable.')
   const result = await navigator.locks.request('mochi.progress.update', () => {
     const previous = readPet()
-    const next = petReducer(previous, action)
+    let next: PetState
+    try { next = petReducer(previous, action) } catch (error) {
+      throw new ProgressValidationError(error instanceof Error ? error.message : 'Invalid progress update.')
+    }
     if (next !== previous && !savePet(next)) throw new Error('Progress cannot be saved.')
     return { pet: next, changed: next !== previous }
   })

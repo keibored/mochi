@@ -20,10 +20,14 @@ export function registerWorker(api: ChromeApi, clock: Clock): TrackerController 
   api.runtime.onStartup.addListener(recover)
   api.runtime.onInstalled.addListener(recover)
   api.runtime.onMessage.addListener((request, sender, reply) => {
-    // Only our bundled extension pages may command the worker. No externally
-    // connectable interface, content script, or web-dashboard listener exists.
+    // Only bundled extension pages may change preferences or approve a pair.
+    // The separately validated external route below has no such privileges.
     if (sender.id !== api.runtime.id || ![api.runtime.getURL('popup.html'), api.runtime.getURL('options.html')].includes(sender.url ?? '')) return false
     void tracker.run(request).then(reply)
+    return true
+  })
+  api.runtime.onMessageExternal?.addListener((request, sender, reply) => {
+    void tracker.external(request, sender).then(reply)
     return true
   })
   api.idle.setDetectionInterval(IDLE_SECONDS)

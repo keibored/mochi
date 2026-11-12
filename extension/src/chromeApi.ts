@@ -35,6 +35,7 @@ export interface ChromeApi {
     onStartup: ChromeEvent<[]>
     onInstalled: ChromeEvent<[{ reason: string }]>
     onMessage: { addListener(listener: (message: unknown, sender: { id?: string; url?: string }, reply: (response: unknown) => void) => boolean): void }
+    onMessageExternal?: { addListener(listener: (message: unknown, sender: { id?: string; url?: string; origin?: string; frameId?: number; tab?: { incognito?: boolean } }, reply: (response: unknown) => void) => boolean): void }
     sendMessage(message: unknown): Promise<unknown>
     openOptionsPage(): Promise<void>
   }

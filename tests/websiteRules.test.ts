@@ -100,7 +100,7 @@ test('version-3 migration preserves running, paused and completed timers and pro
     Reflect.deleteProperty(old, 'websiteRules')
     const serialized = JSON.stringify(old)
     const migrated = migratePet(old)
-    assert.deepEqual(migrated, { ...state, version: 4, websiteRules: [] })
+    assert.deepEqual(migrated, { ...state, version: 5, websiteRules: [] })
     assert.equal(JSON.stringify(old), serialized)
     storageFixture(old)
     assert.equal(savePet(migrated!), true)

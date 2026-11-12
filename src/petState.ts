@@ -4,9 +4,11 @@ import { completionTime, isTimerDuration, pauseTimer, resumeTimer } from './time
 import type { TimerSession } from './timer.ts'
 import { changeWebsiteRule } from './websiteRules.ts'
 import type { WebsiteCategory, WebsiteRule } from './websiteRules.ts'
+import { activateSync, freshWebSync, ingestSync, reserveSync } from './integration/syncDomain.ts'
+import type { SyncPairing, WebSyncState } from './integration/syncDomain.ts'
 
 export interface PetState {
-  version: 4
+  version: 5
   adopted: boolean
   name: string
   xp: number
@@ -15,10 +17,11 @@ export interface PetState {
   dailyFocusGoal: number
   timer: TimerSession | null
   websiteRules: WebsiteRule[]
+  extensionSync: WebSyncState
 }
 
 export function freshPet(): PetState {
-  return { version: 4, adopted: false, name: 'Mochi', xp: 0, foodCredits: 0, activities: [], dailyFocusGoal: DEFAULT_FOCUS_GOAL, timer: null, websiteRules: [] }
+  return { version: 5, adopted: false, name: 'Mochi', xp: 0, foodCredits: 0, activities: [], dailyFocusGoal: DEFAULT_FOCUS_GOAL, timer: null, websiteRules: [], extensionSync: freshWebSync() }
 }
 
 export type PetAction =
@@ -28,12 +31,28 @@ export type PetAction =
   | { type: 'goal'; minutes: number }
   | { type: 'rule-save'; hostname: string; category: WebsiteCategory; originalHostname?: string }
   | { type: 'rule-remove'; hostname: string }
+  | { type: 'sync-reserve'; pairing: Omit<SyncPairing, 'cutoffAt'> }
+  | { type: 'sync-activate'; epochId: string; extensionId: string; cutoffAt: number }
+  | { type: 'sync-ingest'; epochId: string; snapshots: unknown; now: number }
   | { type: 'timer-start'; id: string; duration: number; now: number }
   | { type: 'timer-pause' | 'timer-resume' | 'timer-save' | 'timer-cancel'; id: string; now: number }
 
 export function petReducer(state: PetState, action: PetAction): PetState {
   if (action.type === 'adopt') return { ...state, adopted: true }
   if (!state.adopted) return state
+  if (action.type === 'sync-reserve') {
+    if (state.extensionSync.authorityStartedAt === null && state.timer) return state
+    return { ...state, extensionSync: reserveSync(state.extensionSync, state.activities, action.pairing) }
+  }
+  if (action.type === 'sync-activate') {
+    const extensionSync = activateSync(state.extensionSync, action)
+    return extensionSync === state.extensionSync ? state : { ...state, extensionSync }
+  }
+  if (action.type === 'sync-ingest') {
+    if (state.extensionSync.pairing?.epochId !== action.epochId) throw new RangeError('The synchronization epoch changed in another tab.')
+    const result = ingestSync(state.extensionSync, action.snapshots, action.now)
+    return { ...state, extensionSync: result.sync, xp: state.xp + result.xpDelta, foodCredits: state.foodCredits + result.creditsDelta }
+  }
   if (action.type === 'rule-save') {
     const result = changeWebsiteRule(state.websiteRules, action.hostname, action.category, action.originalHostname)
     return result.error ? state : { ...state, websiteRules: [...result.rules] }
@@ -77,7 +96,9 @@ export function petReducer(state: PetState, action: PetAction): PetState {
   const { activity } = action
   if (!isActivity(activity) ||
       state.activities.some((entry) => entry.id === activity.id)) return state
-  const reward = rewardsForEntry(state.activities, activity.duration, new Date(activity.timestamp), activity.category)
+  const reward = state.extensionSync.authorityStartedAt === null
+    ? rewardsForEntry(state.activities, activity.duration, new Date(activity.timestamp), activity.category)
+    : { xp: 0, credits: 0 }
   return {
     ...state,
     xp: state.xp + reward.xp,

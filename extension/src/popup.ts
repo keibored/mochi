@@ -25,14 +25,28 @@ function render(report: Report) {
     row.append(title, value); totals.append(row)
   }
   element('empty').textContent = Object.values(report.totalsMs).every((total) => total === 0) ? 'No time recorded today. Enable tracking, categorize a website, and browse actively.' : 'Millisecond precision is retained locally; displayed seconds are rounded down.'
-  element('checked').textContent = `Last checked ${new Date(report.checkedAt).toLocaleTimeString()}. Rules and totals are extension-only.`
+  const pairing = element('pairing')
+  pairing.replaceChildren()
+  const pending = report.state.pendingPairing
+  pairing.hidden = !pending || pending.expiresAt <= Date.now()
+  if (pending && !pairing.hidden) {
+    const title = document.createElement('h2'), text = document.createElement('p'), actions = document.createElement('div')
+    title.textContent = 'Allow local dashboard connection?'
+    text.textContent = `Approve ${pending.origin} to receive category/time summaries. Website rules stay here. New connections start with future activity; existing totals and pet progress are preserved.`
+    actions.className = 'actions'
+    actions.append(button('Approve connection', () => void update('sync-approve', { requestId: pending.requestId })),
+      button('Reject', () => void update('sync-reject', { requestId: pending.requestId })))
+    pairing.append(title, text, actions)
+  }
+  element('extension-id').textContent = browserApi.runtime.id
+  element('checked').textContent = `Last checked ${new Date(report.checkedAt).toLocaleTimeString()}. ${report.state.pairing ? 'Dashboard access has been approved; the web app verifies its live connection separately.' : 'No dashboard access approved.'}`
 }
-async function update(kind = 'report') {
+async function update(kind = 'report', fields: Record<string, string> = {}) {
   if (busy) return
   busy = true
-  element('controls').querySelectorAll('button').forEach((control) => { control.disabled = true })
+  document.querySelectorAll<HTMLButtonElement>('button').forEach((control) => { control.disabled = true })
   try {
-    const report = await request({ kind })
+    const report = await request({ kind, ...fields })
     element('error').textContent = ''
     render(report)
   } catch (error) {
@@ -40,7 +54,7 @@ async function update(kind = 'report') {
     element('current').textContent = 'Current activity could not be checked.'
     element('error').textContent = error instanceof Error ? error.message : 'Could not save local activity. Try again.'
     element('controls').replaceChildren(button('Retry', () => void update()))
-  } finally { busy = false }
+  } finally { busy = false; document.querySelectorAll<HTMLButtonElement>('button').forEach((control) => { control.disabled = false }) }
 }
 element('settings').addEventListener('click', () => { void browserApi.runtime.openOptionsPage().catch(() => { element('error').textContent = 'Could not open settings.' }) })
 void update()

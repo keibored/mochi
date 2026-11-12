@@ -71,7 +71,7 @@ test('adoption, logging and repeated feeds use immutable updates and never negat
 test('saved record validates activity IDs, durations, timestamps and balances', () => {
   const valid = { ...freshPet(), adopted: true, activities: [entry(30)], xp: 10, foodCredits: 2 }
   assert.equal(isPetState(valid), true)
-  for (const invalid of [null, {}, { ...valid, version: 5 }, { ...valid, foodCredits: -1 },
+  for (const invalid of [null, {}, { ...valid, version: 6 }, { ...valid, foodCredits: -1 },
     { ...valid, xp: 1.5 }, { ...valid, activities: [entry(0)] },
     { ...valid, activities: [entry(30), entry(30)] },
     { ...valid, activities: [{ ...entry(30), timestamp: 'invalid' }] },
@@ -140,7 +140,7 @@ test('version-1 migration preserves progress without replaying rewards', () => {
   const legacy = { version: 1, adopted: true, name: 'Mochi', xp: 10, foodCredits: 2, activities: [legacyEntry] }
   const snapshot = JSON.stringify(legacy)
   const migrated = migratePet(legacy)!
-  assert.equal(migrated.version, 4)
+  assert.equal(migrated.version, 5)
   assert.equal(migrated.timer, null)
   assert.equal(migrated.dailyFocusGoal, 60)
   assert.equal(migrated.adopted, true)
@@ -166,7 +166,7 @@ test('migration through storage retains spent credits and writes the updated ver
   assert.equal(savePet(loaded.pet), true)
   assert.deepEqual(loadPet().pet, loaded.pet)
   assert.deepEqual([loadPet().pet.xp, loadPet().pet.foodCredits], [10, 2])
-  assert.equal(JSON.parse(raw).version, 4)
+  assert.equal(JSON.parse(raw).version, 5)
 })
 
 test('daily category summaries switch at local midnight', () => {

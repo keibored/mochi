@@ -1,9 +1,9 @@
 import type { WebsiteCategory } from '../websiteRules.ts'
 
-/** Proposed immutable wire contract; reused for extension-local aggregates.
- * Current-day drafts must not be sent as immutable events. No web receiver,
- * connection state, or reward ingestion is implemented. See docs/extension-integration.md for validation, privacy,
- * local-day splitting and reward-authority requirements before accepting data.
+/** Legacy category-summary header retained in extension-local storage.
+ * The implemented live bridge uses cumulative SyncSummaryV2 revisions from
+ * syncDomain.ts instead of replaying these mutable drafts as immutable events.
+ * See docs/extension-integration.md for validation and reward-authority rules.
  */
 export interface ExtensionActivitySummaryV1 {
   schemaVersion: 1

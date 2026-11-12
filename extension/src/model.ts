@@ -1,6 +1,8 @@
 import { areWebsiteRules, categoryForHostname, normalizeHostname } from '../../src/websiteRules.ts'
 import type { WebsiteCategory, WebsiteRule } from '../../src/websiteRules.ts'
 import type { ExtensionActivitySummaryV1 } from '../../src/integration/extensionActivity.ts'
+import { isApprovedPairing, isPendingPairing } from './syncState.ts'
+import type { ApprovedPairing, PendingPairing } from './syncState.ts'
 
 export const STORAGE_KEY = 'mochi.extension.v1'
 export const IDLE_SECONDS = 60
@@ -9,14 +11,16 @@ export const CLOCK_TOLERANCE_MS = 2_000
 export const RETENTION_MS = 7 * 24 * 60 * 60_000
 export const MAX_SUMMARIES = 64
 export const MAX_RULES = 200
-export type LocalSummary = ExtensionActivitySummaryV1 & { finalized: boolean }
+export type LocalSummary = ExtensionActivitySummaryV1 & { finalized: boolean; revision: number; epochId: string | null }
 export interface TrackingState {
-  version: 1
+  version: 2
   enabled: boolean
   paused: boolean
   rules: WebsiteRule[]
   summaries: LocalSummary[]
   checkpointAt: number
+  pairing: ApprovedPairing | null
+  pendingPairing: PendingPairing | null
 }
 export interface Observation {
   focused: boolean
@@ -26,7 +30,7 @@ export interface Observation {
   timeZone: string
 }
 export type TrackingStatus = 'Tracking off' | 'Tracking' | 'Paused' | 'Idle' | 'Browser unfocused' | 'No supported website'
-export const freshState = (): TrackingState => ({ version: 1, enabled: false, paused: false, rules: [], summaries: [], checkpointAt: 0 })
+export const freshState = (): TrackingState => ({ version: 2, enabled: false, paused: false, rules: [], summaries: [], checkpointAt: 0, pairing: null, pendingPairing: null })
 
 export function localDay(at: number): string {
   const date = new Date(at)
@@ -53,7 +57,9 @@ export function classify(rules: readonly WebsiteRule[], hostname: string | null)
 export function isTrackingState(value: unknown): value is TrackingState {
   if (typeof value !== 'object' || value === null) return false
   const state = value as Partial<TrackingState>
-  if (state.version !== 1 || typeof state.enabled !== 'boolean' || typeof state.paused !== 'boolean' ||
+  if (state.version !== 2 || typeof state.enabled !== 'boolean' || typeof state.paused !== 'boolean' ||
+      (state.pairing !== null && !isApprovedPairing(state.pairing)) ||
+      (state.pendingPairing !== null && !isPendingPairing(state.pendingPairing)) ||
       !areWebsiteRules(state.rules) || state.rules.length > MAX_RULES ||
       !Number.isSafeInteger(state.checkpointAt) || state.checkpointAt! < 0 || !Number.isFinite(new Date(state.checkpointAt!).getTime()) ||
       !Array.isArray(state.summaries) || state.summaries.length > MAX_SUMMARIES) return false
@@ -62,6 +68,8 @@ export function isTrackingState(value: unknown): value is TrackingState {
     if (typeof item !== 'object' || item === null) return false
     const entry = item as Partial<LocalSummary>
     if (entry.schemaVersion !== 1 || entry.source !== 'extension' || typeof entry.eventId !== 'string' ||
+        !Number.isSafeInteger(entry.revision) || entry.revision! < 1 ||
+        (entry.epochId !== null && (typeof entry.epochId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(entry.epochId))) ||
         !entry.eventId || ids.has(entry.eventId) || !['Focus', 'Leisure', 'Neutral'].includes(entry.category!) ||
         typeof entry.startedAtIso !== 'string' || typeof entry.endedAtIso !== 'string' ||
         typeof entry.timeZone !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(entry.localDate ?? '') ||
@@ -83,25 +91,38 @@ export function isTrackingState(value: unknown): value is TrackingState {
   })
 }
 
+export function migrateTrackingState(value: unknown): TrackingState | null {
+  if (typeof value !== 'object' || value === null) return null
+  const old = value as Record<string, unknown>
+  if (old.version === 2) return isTrackingState(old) ? old : null
+  if (old.version !== 1 || !Array.isArray(old.summaries)) return null
+  const migrated = { ...old, version: 2, pairing: null, pendingPairing: null,
+    summaries: old.summaries.map((entry: unknown) => typeof entry === 'object' && entry !== null
+      ? { ...entry, revision: 1, epochId: null } : entry) }
+  return isTrackingState(migrated) ? migrated : null
+}
+
 /** Immutable category/day aggregates; no hostname or tab history is stored.
  * Local midnight comes from calendar arithmetic, including DST days.
  */
 export function addTime(state: TrackingState, start: number, end: number, category: WebsiteCategory, timeZone: string, id: () => string): TrackingState {
   const summaries = state.summaries.map((summary) => ({ ...summary }))
+  const epochId = state.pairing && state.pairing.cutoffAt !== null ? state.pairing.epochId : null
   let cursor = start
   while (cursor < end) {
     const date = new Date(cursor)
     const midnight = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).getTime()
     const boundary = Math.min(end, midnight)
     const day = localDay(cursor)
-    const existing = summaries.find((entry) => !entry.finalized && entry.category === category && entry.localDate === day && entry.timeZone === timeZone)
+    const existing = summaries.find((entry) => !entry.finalized && entry.epochId === epochId && entry.category === category && entry.localDate === day && entry.timeZone === timeZone)
     if (existing) {
       existing.activeDurationMs += boundary - cursor
       existing.endedAtIso = new Date(boundary).toISOString()
+      existing.revision++
     } else {
       summaries.push({ schemaVersion: 1, eventId: id(), source: 'extension', category,
         startedAtIso: new Date(cursor).toISOString(), endedAtIso: new Date(boundary).toISOString(),
-        activeDurationMs: boundary - cursor, timeZone, localDate: day, finalized: false })
+        activeDurationMs: boundary - cursor, timeZone, localDate: day, finalized: false, revision: 1, epochId })
     }
     cursor = boundary
   }
@@ -111,7 +132,7 @@ export function addTime(state: TrackingState, start: number, end: number, catego
 export function prune(state: TrackingState, now: number, timeZone: string): TrackingState {
   return { ...state, summaries: state.summaries
     .filter((entry) => Date.parse(entry.endedAtIso) >= now - RETENTION_MS)
-    .map((entry) => entry.localDate !== localDay(now) || entry.timeZone !== timeZone ? { ...entry, finalized: true } : entry)
+    .map((entry) => !entry.finalized && (entry.localDate !== localDay(now) || entry.timeZone !== timeZone) ? { ...entry, finalized: true, revision: entry.revision + 1 } : entry)
     .sort((a, b) => Date.parse(a.endedAtIso) - Date.parse(b.endedAtIso)).slice(-MAX_SUMMARIES) }
 }
 
