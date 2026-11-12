@@ -1,12 +1,14 @@
 # Future browser activity integration
 
-This is a design boundary, not an implemented connection. Mochi's primary experience will be a pet that reacts to browser activity from a companion Chrome extension. The main web dashboard is being prepared first; the optional timer and manual logger remain useful independent tools. There is no extension, receiver, backend, connect action, or automatic detection in this increment.
+This is a design boundary, not an implemented dashboard connection. Mochi's primary experience will be a pet that reacts to browser activity from a companion Chrome extension. A [standalone local extension proof of concept](../extension/README.md) now implements opt-in activity estimates and a popup report with separately stored rules. It has no dashboard receiver, backend, connect action, or pet reward ingestion. The optional web timer and manual logger remain independent tools. Real Chrome integration is unverified until the generated unpacked extension is tested in a browser.
 
 ## Planned flow
 
 Extension → validated activity ingestion → existing reward logic → dashboard.
 
 The proposed TypeScript wire contract is `src/integration/extensionActivity.ts`. Each version-1 event contains a globally unique stable `eventId`, literal source `extension`, category (Focus, Leisure, Neutral), UTC ISO start/end timestamps for a half-open interval, integer `activeDurationMs` in milliseconds, IANA `timeZone`, and `localDate` in YYYY-MM-DD form. Events aggregate time by category, not individual page visits. Rest remains intentional and must never be inferred from idle browser time.
+
+The extension PoC reuses this shape for local category/day aggregates, adding a local-only `finalized` boolean. Current-day aggregates are mutable drafts with stable IDs; they are not immutable delivery events. Closed-day/timezone aggregates become immutable finalized summaries, retaining IDs and contents until retention removes them. Future transport must strip `finalized` and send only finalized summaries, or introduce a separately versioned revision protocol for live updates. No transport or receiver exists now, and drafts must not be sent/retried as immutable version-1 events. First/last timestamps bound an aggregate that can contain inactive gaps; `activeDurationMs` includes only the counted segments. The PoC drops unconfirmed worker/restart/sleep tails and bounds retention; see its accounting guide for uncertainty.
 
 ## Collection and privacy requirements
 

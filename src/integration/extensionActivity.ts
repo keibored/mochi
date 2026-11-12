@@ -1,7 +1,8 @@
 import type { WebsiteCategory } from '../websiteRules.ts'
 
-/** Proposed wire contract only; no receiver, connection state, or ingestion is
- * implemented. See docs/extension-integration.md for validation, privacy,
+/** Proposed immutable wire contract; reused for extension-local aggregates.
+ * Current-day drafts must not be sent as immutable events. No web receiver,
+ * connection state, or reward ingestion is implemented. See docs/extension-integration.md for validation, privacy,
  * local-day splitting and reward-authority requirements before accepting data.
  */
 export interface ExtensionActivitySummaryV1 {

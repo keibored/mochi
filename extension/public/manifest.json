@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Mochi Browser Companion (Local Proof of Concept)",
+  "version": "0.1.0",
+  "minimum_chrome_version": "120",
+  "description": "Opt-in local activity estimates. No dashboard sync, rewards, or network collection.",
+  "permissions": ["tabs", "idle", "storage", "alarms"],
+  "incognito": "not_allowed",
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "Mochi activity" },
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'none'" }
+}
