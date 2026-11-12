@@ -47,7 +47,7 @@ export function WebsiteRulesSettings({ rules, dispatch, busy, canPersist }: Prop
   return (
     <section className="panel website-settings" aria-labelledby="website-settings-heading">
       <h2 id="website-settings-heading">Website categories</h2>
-      <p id="website-rules-help">These rules will apply to future browser tracking once the extension is connected.</p>
+      <p id="website-rules-help">These are your saved dashboard rules. Active browser tracking uses the rules in Mochi’s Brave extension settings. The two rule lists are kept separately and never overwrite each other.</p>
       <p className="help-text">You decide what each site means for your day. Unknown websites default to Neutral. Rules match exact hostnames only: example.com does not include www.example.com or other subdomains. Rest is an intentional activity; browser inactivity will not count as rest.</p>
       <form onSubmit={save} noValidate>
         <label htmlFor="website-hostname">Website hostname or HTTP(S) URL</label>

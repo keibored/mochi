@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { petReducer } from './petState'
 import type { PetAction } from './petState'
-import { loadPet, readPet, STORAGE_KEY, transactPet } from './storage'
+import { loadPet, ProgressValidationError, readPet, STORAGE_KEY, transactPet } from './storage'
 
 export function useProgress() {
   const [loaded] = useState(loadPet)
@@ -14,7 +14,7 @@ export function useProgress() {
   const [pending, setPending] = useState(0)
 
   const dispatch = useCallback(async (action: PetAction): Promise<boolean> => {
-    const timerAction = action.type.startsWith('timer-')
+    const durableAction = action.type.startsWith('timer-') || action.type.startsWith('sync-')
     setPending((count) => count + 1)
     try {
       if (offline.current) throw new Error('Session-only mode')
@@ -28,7 +28,7 @@ export function useProgress() {
       offline.current = true
       setCanPersist(false)
       setStorageNotice((previous) => previous || 'Progress cannot be saved. Changes are session-only; the timer is unavailable. Existing saved progress is preserved.')
-      if (timerAction) return false
+      if (durableAction) return false
       const next = petReducer(current.current, action)
       const changed = next !== current.current
       current.current = next
@@ -37,6 +37,25 @@ export function useProgress() {
     } finally {
       setPending((count) => count - 1)
     }
+  }, [])
+
+  const commitSync = useCallback(async (action: PetAction) => {
+    if (!action.type.startsWith('sync-')) throw new ProgressValidationError('Expected a synchronization update.')
+    if (offline.current) throw new Error('Synchronization requires available persistent storage. Reload when storage is available.')
+    setPending((count) => count + 1)
+    try {
+      const result = await transactPet(action)
+      current.current = result.pet
+      setPet(result.pet)
+      return result
+    } catch (error) {
+      if (!(error instanceof ProgressValidationError)) {
+        offline.current = true
+        setCanPersist(false)
+        setStorageNotice('Synchronization could not be saved. Existing progress is preserved. Reload when storage is available; no in-memory sync rewards were applied.')
+      }
+      throw error
+    } finally { setPending((count) => count - 1) }
   }, [])
 
   useEffect(() => {
@@ -65,5 +84,5 @@ export function useProgress() {
     }
   }, [])
 
-  return { pet, dispatch, storageNotice, canPersist, busy: pending > 0 }
+  return { pet, dispatch, commitSync, storageNotice, canPersist, busy: pending > 0 }
 }

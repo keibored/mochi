@@ -2,162 +2,108 @@
 
 Mochi is a kawaii productivity companion: a little focus, a little rest, and a bunny by your side.
 
-Mochi’s primary experience will be a pet that reacts to automatically tracked browser activity from a companion Chrome extension. Manual logging and the focus timer are optional tools. The React + TypeScript web app uses Vite. A standalone, opt-in Chrome extension proof of concept now implements local browser activity estimates and a popup report; it is **not connected to the web dashboard or pet rewards**. The backend is not implemented. Real Chrome integration still needs unpacked-browser verification.
+The React + TypeScript web app is the main pet dashboard. A companion Manifest V3 extension estimates active website time in Brave and can sync category totals to the local dashboard after explicit approval. Manual logging and the focus timer remain optional tools. This integration is local; there is no backend or account service.
 
 ## Working now
 
-- A responsive pink-and-cream welcome screen, adoption flow, and emoji bunny dashboard.
-- A primary activity area with honest disconnected browser-tracking status, today's summary and daily goal progress, and recent activities with accurate Manual/Timer source labels. There is no fake Connect button or extension download link.
-- Local website category settings: add, edit, and remove an exact-hostname rule with Focus, Leisure, or Neutral. Unknown sites default to Neutral; no website categories are preselected. URLs normalize to hostnames, dropping paths, queries, fragments and ports. Subdomains need their own rules. Rule changes never reclassify old activity or replay rewards.
-- Manual activity logging for Focus, Leisure, Rest, and Neutral: whole durations of 1–240 minutes and optional notes up to 200 characters.
-- A persistent Focus Timer with 1–120 whole-minute sessions (default 25), Start, Pause, Resume, confirmed cancellation, and an explicit Save session action after completion. History distinguishes Manual and Timer entries.
-- Today's local-calendar-day totals by category, plus the five most recent activities with local timestamps and notes. All entries are retained in storage.
-- Focus rewards: each accumulated 15-minute block within a local calendar day earns 5 XP and 2 food credits. Partial minutes carry across entries that day. Only the first 240 focus minutes per day earn rewards; additional time still appears in totals. Other categories never subtract XP or credits.
-- Feeding costs 2 food credits, preserves XP, and briefly makes Mochi happy. Insufficient credits disable feeding.
-- Lifetime XP progress toward the first 100-XP milestone.
-- A configurable daily focus goal, defaulting to 60 minutes, with a valid range of 15–480 whole minutes. Goal progress is separate from lifetime XP and the reward cap; changing the goal never awards rewards.
-- Gentle activity reactions, inline validation, accessible feedback, and keyboard focus indicators.
-- Local persistence with validation and migration of older focus-only entries.
-- A separate Manifest V3 extension implementation with explicit enable/pause/resume controls, focused-active-tab/idle gating, local category totals, and its own category settings. Its rules and storage are independent of the web app. See [extension setup and limitations](extension/README.md).
+- A responsive pink-and-cream welcome screen, adoption, emoji bunny, feeding, lifetime XP, and a first milestone of 100 XP.
+- Extension tracking of the active HTTP(S) tab in the focused browser window while the user is active, with Enable, Pause, Resume, idle handling, and a popup showing real local Focus, Leisure, and Neutral totals.
+- An explicitly approved Brave-to-dashboard connection at **`http://localhost:5173`**. The dashboard shows a freshly verified tracking state and last successfully saved sync; saved data alone never means connected.
+- Today's category summary, a separate daily Focus goal, and recent activities labeled **Manual**, **Timer**, or **Extension**. Browser totals retain fractional minutes. Rest stays intentional, never inferred from inactivity.
+- Exact-hostname category rules with unknown sites defaulting to Neutral. Tracking uses the extension's rules. Existing dashboard rules remain editable and separate; connecting never overwrites either list.
+- Manual Focus, Leisure, Rest, and Neutral entries: 1–240 whole minutes and an optional note of up to 200 characters.
+- A persistent Focus Timer: 1–120 whole minutes, default 25, with Start, Pause, Resume, confirmed cancellation, and Save session after completion. An active timer stays visible when **Other ways to record time** is collapsed.
+- Focus rewards of **5 XP and 2 food credits per accumulated 15 minutes**, limited to the first **240 Focus minutes per local day**. Partial browser minutes remain exact milliseconds in reward calculations. Other categories never subtract rewards.
+- Feeding for exactly 2 credits without changing XP. A daily Focus goal defaults to 60 minutes and accepts 15–480 whole minutes; changing it never awards rewards.
+- Validated versioned persistence and cross-tab coordination preserving adoption, activities, goals, timer state, XP, and spent credits.
 
-Timer and manual logging live in the keyboard-accessible **Other ways to record time** disclosure. An active timer’s running, paused, or completed status remains visible when it is collapsed; **Open timer controls** reveals the controls. Rest stays intentional and is never inferred from browser inactivity.
+Before first connecting, the existing manual/timer reward rules apply: a fresh 30-minute Focus entry earns 10 XP and 4 credits; feeding once leaves 10 XP and 2 credits. After first connecting, browser Focus supplies new rewards and Focus goal progress. Optional Manual/Timer entries still save to history without extra rewards, including while paused or disconnected. Intentional manual Rest still counts in the daily summary. This prevents overlapping entries from earning twice.
 
-For a fresh pet, logging 30 Focus minutes yields 10 XP and 4 credits. Feeding once leaves 10 XP and 2 credits. Refreshing retains those values when browser storage is available.
+## Rebuild, reload, and connect in Brave
 
-## Prepared for integration
+From **`C:\Users\keish\OneDrive\Documents\mochi`**, in PowerShell:
 
-The separate TypeScript contract in [extensionActivity.ts](src/integration/extensionActivity.ts) defines a proposed versioned extension aggregate with a stable event ID, literal `extension` source, category, start/end ISO timestamps, explicit active milliseconds, timezone and local date. It is not an implemented receiver or runtime validator.
-
-Planned flow: **Extension → validated activity ingestion → existing reward logic → dashboard**. [Integration requirements](docs/extension-integration.md) specify active-tab/focused-window/active-user counting, stopping on idle or pause, atomic retry deduplication, local-midnight splitting, privacy-preserving category/time aggregates, and a future reward-authority cutoff to avoid overlapping manual/timer rewards. Current local tools keep their existing reward behavior until that integration is implemented.
-
-## Not implemented yet
-
-There is no extension-to-dashboard connection, reward ingestion, connection handshake, backend, authentication, analytics, or device sync. The local extension estimates activity only after explicit enablement; the web dashboard still does not automatically detect browser activity. Web-app website rules are saved for a future integration and are not synchronized with extension rules. Saved activities, localStorage, and rule settings never imply a connected dashboard. No page contents, titles, full URLs, queries, fragments, or site-visit history are persisted by the extension; only category/day aggregates and user-authored rules are stored.
-
-## Branch dependency for this increment
-
-`feature/tracking-dashboard` starts from timer commit `233bb7d` and depends on the still-unmerged [focus timer PR #1](https://github.com/keibored/mochi/pull/1). Its PR targets `feature/focus-timer` to show only this increment, preserving timer changes without duplicating their diff. Neither PR is merged automatically. After PR #1 is merged, retarget this PR to `main` and reconcile the base before merging.
-
-The current `feature/browser-tracking` increment starts from tracking-dashboard commit `ae440d7` and targets `feature/tracking-dashboard` while [PR #2](https://github.com/keibored/mochi/pull/2) remains unmerged. It therefore depends on both earlier PRs. No prior PRs are merged or force-pushed. Retarget/reconcile this PR against `main` after its parents merge.
-
-## Local Chrome extension setup
-
-From this repository root:
-
-```sh
-npm ci
-npm run test:extension
-npm run build:extension
+```powershell
+npm.cmd run build:extension
+npm.cmd run build
 ```
 
-Use `npm.cmd` in PowerShell if needed. Open **chrome://extensions**, enable **Developer mode**, choose **Load unpacked**, and select **`C:\Users\keish\OneDrive\Documents\mochi\extension\dist`**. Chrome 120+ is required. Pin/open Mochi and click **Enable tracking**; loading alone never enables it. Use **Website categories** to set exact-hostname Focus/Leisure/Neutral rules separately from the web app. Reload the extension after rebuilding.
+The exact unpacked extension output folder is:
 
-For a short manual check, assign `example.com` to Focus and `example.org` to Leisure, actively browse each for about 20 seconds, and inspect the popup. Switch to another application, Pause/Resume, and leave the machine idle for over 60 seconds: unfocused/paused/idle time after the threshold should stop accumulating. Close/reopen Chrome and confirm saved totals/preferences remain while closed time is not credited. The web app's XP and food credits must not change. These are explicit test categories, not built-in defaults.
-
-Permissions are limited to `tabs` (transient active URL metadata), `idle` (60-second active/idle/locked detection), `storage` (extension-local data), and `alarms` (30-second checkpoint requests). There are no host permissions or content scripts. Worker restarts discard unconfirmed tails; long gaps and significant clock discontinuities are dropped. This can undercount quiet-site time and delayed alarms. Short event/clock/idle-threshold uncertainty remains; estimates do not verify work or precisely identify every short sleep. Data is bounded to rolling seven-day aggregates, at most 64 summaries and 200 explicit rules. See the [full accounting, privacy, permission sources, and manual test guide](extension/README.md).
-
-The existing web commands below are unchanged. Full verification uses `npm test`, `npm run test:extension`, `npm run lint`, `npm run build`, `npm run build:extension`, and `git diff --check`.
-
-## Local development
-
-Use Node.js 24 LTS and npm. The test script runs TypeScript directly through Node's built-in test runner; Node.js 24 is the verified runtime for this project.
-
-Install the locked dependencies:
-
-```sh
-npm ci
+```text
+C:\Users\keish\OneDrive\Documents\mochi\extension\dist
 ```
 
-Start the Vite development server and open the local URL printed in the terminal:
+1. Use the same **Brave profile** that contains your pet progress and existing extension. Keep the current dev server running, or start it with `npm.cmd run dev`. Open **`http://localhost:5173/`**. Vite uses port 5173 with `strictPort`: it exits if occupied rather than changing origin. The production preview's different port is not allowlisted.
+2. Open **`brave://extensions`**, enable **Developer mode**, and click **Reload** on the **existing unpacked Mochi extension**. Its card should show version **0.2.0**. Keep the same installation and its saved rules/preferences.
+3. Refresh the web app. Save or cancel an existing active timer before the **first** connection; the app never resolves it automatically.
+4. Copy Mochi's 32-letter extension ID from its popup or `brave://extensions`. Enter it in the dashboard's **Mochi extension ID** field and click **Connect in Brave**.
+5. Open that extension's popup and explicitly approve **`http://localhost:5173`** within two minutes. Return to the dashboard; a real response and successful local save establish the connected state.
+6. If tracking is off or paused, use the popup's existing **Enable tracking** or **Resume** control. Approval does **not** enable or resume tracking automatically. **Connected · Tracking off** and **Connected · Paused** are valid states.
+
+The dashboard requests totals about every five seconds while visible; returning to the tab triggers a check. Refreshing the same origin reuses its saved token without another approval. If connection fails, check the exact origin and ID, reload the existing extension, refresh the app, and request approval again if needed. Do not clear site data to reconnect.
+
+For a first installation only, use **Load unpacked** in `brave://extensions` and select the output folder containing `manifest.json`. Existing users should reload their installation rather than load a duplicate. See [the extension guide](extension/README.md).
+
+## Local development and checks
+
+Use Node.js 24 LTS and npm. Node 24 runs the TypeScript tests directly with its built-in test runner. Install locked dependencies with `npm ci`.
 
 ```sh
 npm run dev
-```
-
-Available checks and build commands:
-
-```sh
 npm test
+npm run test:extension
 npm run lint
 npm run build
+npm run build:extension
+git diff --check
 ```
 
-`npm test` runs the focused domain and storage tests in `tests/`. `npm run lint` runs ESLint. `npm run build` runs TypeScript checks and produces the Vite production build in `dist/`.
+`npm test` covers web domain, migration, storage, ingestion, and presentation calculations in `tests/`. `npm run test:extension` runs deterministic accounting and messaging tests with mocked browser APIs. Lint runs ESLint. The web build checks TypeScript and outputs `dist/`; the extension build separately checks TypeScript and outputs `extension/dist/`. Build output is ignored. `npm run preview` previews the web production build but does not change the bridge's allowed origin.
 
-Preview a completed production build locally:
-
-```sh
-npm run preview
-```
-
-On Windows PowerShell, if execution policy blocks `npm.ps1`, use `npm.cmd` in place of `npm`, for example `npm.cmd run dev` and `npm.cmd test`.
-
-No environment variables are currently required. Local `.env` files are ignored by Git; a future `.env.example` may contain placeholders only. Never place secrets in frontend environment variables: values used by browser code can be exposed in the built app.
+In PowerShell, use `npm.cmd` instead of `npm` if execution policy blocks `npm.ps1`, for example `npm.cmd test`. No environment variables are required. Local `.env` files are ignored; a future `.env.example` may contain placeholders only. Browser-bundled environment values are not secrets.
 
 ## Persistence and limitations
 
-The app stores one version-4 JSON record under `mochi.progress` in `localStorage`. It includes adoption, pet name, XP, food credits, activities (IDs, sources, categories, durations, notes, and ISO timestamps), the daily focus goal, the active timer session, and website category rules. Version-1 focus-only records migrate to Focus entries with empty notes and a default goal. Version-1 and version-2 entries become Manual entries. Version-3 timer records gain an empty website-rule list, preserving Manual/Timer sources and the entire active session. Migration preserves IDs, timestamps, adoption, notes, goals, XP, and spent food credits without replaying rewards. Website-rule edits use the existing shared lock and never change past entries or balances.
+The web app stores one **version-5** JSON record under `mochi.progress` in `localStorage`: pet progress, Manual/Timer entries, goal, active timer, dashboard rules, pairing metadata, accepted extension summaries, the pre-sync Focus baseline, and last successful sync. Earlier records migrate structurally without replaying rewards. Old focus-only entries become Focus/Manual; existing source labels and timers remain accurate. Version-4 progress gains empty sync state. XP and spent credits remain unchanged.
 
-Progress belongs to the current browser profile and origin (scheme, host, and port). Different devices, browsers, or local server ports do not share it. Clearing site data removes it; private browsing or browser policies may prevent persistence. There is no server backup, account sync, or export. Activity history grows in the record and can eventually reach browser storage limits.
+The extension keeps a **version-2** record under the existing `mochi.extension.v1` key. Version-1 data migrates without clearing preferences, rules, event IDs, or totals. Pairing seals earlier drafts and starts a new synchronization epoch. Activity from **before first activation stays in the popup and is never imported or retroactively rewarded**. The popup can therefore show more time than the dashboard.
 
-Unavailable storage shows a warning and leaves the app usable for the session. Malformed or unsupported records are preserved rather than overwritten; the app shows a fresh session and cannot save it over that unreadable data. Daily grouping uses the device's current local calendar and timezone. There is no automatic time tracking, and saved data is not protected against manual editing.
+Before activation, the dashboard durably captures all existing Focus totals as a baseline and reserves reward authority. Browser Focus adds only newly completed reward blocks above that baseline, sharing the 240-minute daily cap. Stable event IDs and cumulative revisions prevent retries, refreshes, reconnects, and concurrent tabs from adding time or rewards twice. Same-epoch reapproval rotates the token while retaining the cutoff, buffer, and ledger. A new epoch preserves accepted progress and the original baseline without replaying old popup totals.
 
-### Timer behavior and safety
+Live connection state is temporary: errors, hiding the app tab, or a response older than 15 seconds invalidate it. Last successful sync is saved only after an actual response is durably ingested. Stored tokens and old entries never prove current tracking. Reward authority remains reserved while paused, disconnected, or waiting for activation; it never automatically switches back to Manual/Timer rewards.
 
-A running timer continues while the page is closed, the device sleeps, or the tab is in the background. Remaining time is calculated from wall-clock timestamps, not by counting interval ticks. Pause stores only the elapsed running time; paused time never counts. Reloading restores running, paused, and completed-but-unsaved sessions. Changing the device clock can affect elapsed time. This is a personal elapsed-time tool, not verification that you were working; it does not inspect browser activity.
+Data belongs to the browser profile and exact origin. Other browsers, devices, and ports do not share progress. There is no server backup, account sync, or export. Unavailable storage is reported; ordinary manual actions may remain session-only, while timer and sync require durable storage and Web Locks. Malformed/unsupported records are preserved rather than overwritten. After a storage failure, reload when storage is available to restore the last saved record.
 
-Completion displays **Focus session complete ♡**. Time and rewards are added only when you choose **Save session**. Saving creates one Focus activity through the same partial-minute and daily-cap reward calculations used for manual entries. Cancel asks for confirmation and adds no activity or rewards, including for completed-but-unsaved sessions.
+Extension retention is a rolling seven days, at most 64 aggregates and 200 rules. Unsynced time can expire before the next dashboard connection. Web history grows and can reach storage limits. Tracking estimates activity rather than verifying work: worker restarts drop unconfirmed tails, long gaps/clock discontinuities are discarded, alarms can be delayed, and the 60-second idle grace period may count. See [accounting limitations](extension/README.md).
 
-For this increment, the entire saved session is attributed to its calculated **completion date in the current local timezone**, rather than its start date or the date you click Save. A session that crosses midnight belongs entirely to the day it finishes; it is not split between days. Returning the next day to save it does not move it to that later day. Manual entries continue to use their logging timestamp.
+Manual entries use their logging date. A timer belongs entirely to its calculated **completion date** in the current local timezone, even if saved later; it is not split across days. Browser aggregates split at local midnight and retain their original local date and IANA timezone. Browser minutes display to 0.01 minute; rewards use exact milliseconds.
 
-Each timer has a stable ID, also used as its saved activity ID. All progress mutations (including manual logs, feeding, goals, and timer actions) run under a shared Web Lock and read the newest record before writing. This prevents concurrent Mochi tabs from starting multiple active timers, resurrecting a saved session from stale state, or saving/rewarding one session twice. Tabs refresh from storage events and when brought back into view. Clearing or manually editing browser storage and unrelated older app versions are outside this guarantee.
+### Timer safety
 
-The timer requires available `localStorage` and Web Locks support in a secure context, such as localhost or HTTPS. If either is unavailable, timer controls are disabled with an explanation and manual logging remains usable in memory. After a storage failure, the tab stays session-only until reload to avoid overwriting saved progress with unsaved changes. Reload when storage is available again to restore the last successfully saved record.
+A running timer continues while the page is closed, backgrounded, or the device sleeps. It uses timestamps rather than counting ticks; paused time does not count. Clock changes can affect it. Completion shows **Focus session complete ♡**; only **Save session** creates an activity. Cancel requires confirmation and adds nothing. Each timer's stable ID is also its saved activity ID.
 
-To try the flow locally, adopt Mochi if needed, set a 1-minute timer, Start, Pause, refresh, Resume, and wait for completion. Save once and confirm a Timer entry appears, then refresh or open another Mochi tab to verify it stays a single entry. One minute alone earns no reward; a fresh 30-minute saved session earns 10 XP and 4 credits. Try Cancel and Keep session, then confirm cancellation on another session and verify no activity is added. Manual logging and feeding remain available alongside the timer.
+All app mutations read the newest record under a shared Web Lock, preventing duplicate saves, multiple active timers, and stale-tab writes. Tabs refresh on storage events and when brought into view. Clearing/manually editing data and unrelated older app versions are outside these guarantees.
 
-### Tracking-dashboard manual checks
+## Manual verification
 
-1. Run `npm run dev` and adopt Mochi if needed. Confirm the primary status reads “Browser tracking isn’t connected yet.” and no connection action is offered.
-2. Save `https://EXAMPLE.com/work?private=value#part` as a Focus rule. The saved hostname should be `example.com`; adding it again should show a duplicate error. Edit its category or hostname, refresh, then remove it. Balances and old activities should not change.
-3. Confirm `example.com` does not include `www.example.com`; each needs its own explicit rule. Invalid hosts and non-HTTP(S) protocols should show an inline error.
-4. Tab to **Other ways to record time** and use Enter or Space to expand/collapse it. Start a 1-minute timer, collapse the section, and confirm the active notice remains visible. Open its controls, pause, refresh, resume, complete and save once. Manual logging remains available in the same section.
-5. Check the layout at desktop and narrow mobile widths, keyboard focus outlines, accurate source labels and persisted rules in another tab. Browser layout/keyboard checks require a real browser and are not covered by domain tests.
+1. Rebuild, reload the existing Brave extension, refresh the exact app origin, and connect as above. Confirm a fresh state and last successful sync. Off/paused must stay off/paused until enabled/resumed.
+2. In **extension** settings, assign `example.com` to Focus and `example.org` to Leisure. Actively browse each about 30 seconds, then return to Mochi and wait for sync. Both categories should increase, labeled **Extension**. These are your choices, not built-in classifications.
+3. Pause in the popup, wait, then return to the dashboard. Confirm the actual paused state and no added paused time. Resume and test tab switches, window focus, and idle handling using the extension guide. Rest must never be inferred.
+4. Accumulate a new 15-minute browser Focus block: it earns 5 XP and 2 credits, subject to today's baseline/cap. Refresh or open another app tab; the same summaries must not reward again. Feeding spends 2 credits without changing XP.
+5. Save each Manual category and a Timer session. After connection they stay in history without extra Focus rewards or goal progress; intentional Rest updates the summary. Change the goal and confirm balances do not change.
+6. Refresh both surfaces and verify pet progress, extension rules, and pairing persist. Check desktop/mobile layout, keyboard controls, focus outlines, and the collapsed active-timer notice.
+
+The user manually confirmed the earlier extension's Focus/Leisure/Neutral accounting and paused popup in Brave. **The new sync bridge has not been verified in a real browser in this environment.** Unit and mocked API tests do not prove Brave external-message delivery, popup approval, or page integration end to end. Check results for a particular change are reported separately.
+
+## Integration boundary and remaining work
+
+The implemented flow is **Extension → validated ingestion → reward calculation → dashboard**. Version-2 summaries carry stable IDs, epoch, cumulative revision, category, ISO bounds, exact milliseconds, timezone/local date, and finalized state. They contain no hostname, rules, full URLs, titles, page contents, or visit history. Direct Chromium messaging avoids a public page-message bridge. See [protocol/security details](docs/extension-integration.md).
+
+Backend services, account authentication, remote/device sync, automatic rule synchronization, and Chrome Web Store distribution remain unimplemented. Production origins require explicit configuration and security review.
 
 ## Git and GitHub workflow
 
-The existing GitHub remote is `origin`: <https://github.com/keibored/mochi>. GitHub repository visibility and remote configuration must only change with the owner's direction.
+`origin` is <https://github.com/keibored/mochi>. `main` is the stable baseline. Use a feature branch per increment, focused commits, relevant tests/lint/builds and `git diff --check`, a reviewed diff, and pull requests. Never force-push, discard others' work, or commit secrets, dependencies, build output, or logs. Visibility and remotes change only at the owner's direction.
 
-- `main` is the stable baseline.
-- Create a feature branch for each next increment.
-- Make focused commits, run tests, lint, and build, and review the diff before committing.
-- Push the feature branch and merge through a pull request when GitHub is connected. Keep `main` passing checks.
-- Continue the main web experience and companion integration in focused increments. The current extension is a standalone local proof of concept; backend and dashboard reward ingestion remain later work.
-- Never commit secrets, `node_modules/`, build output, or logs. Never force-push or discard others' changes to resolve divergence.
-
-Once the baseline is pushed, start a new increment from a clean working tree:
-
-```sh
-git switch main
-git pull --ff-only origin main
-git switch -c feature/next-increment
-```
-
-After implementing a focused change:
-
-```sh
-npm test
-npm run lint
-npm run build
-git diff --check
-git diff
-git status --short
-```
-
-Stage only the intended paths with `git add`, review `git diff --cached`, and make a focused commit. Then push the feature branch:
-
-```sh
-git push -u origin feature/next-increment
-```
-
-Open a pull request against `main`, review it, and merge after checks pass. If the remote has unexpected history or a push is rejected, inspect and reconcile the histories without overwriting either side.
+`feature/extension-dashboard-sync` targets `feature/browser-tracking` while [PR #3](https://github.com/keibored/mochi/pull/3) is open and unmerged. PR #3 depends on [tracking dashboard PR #2](https://github.com/keibored/mochi/pull/2), which depends on [timer PR #1](https://github.com/keibored/mochi/pull/1). Keep these PRs unmerged for review. Once parents merge, retarget/reconcile dependent branches against `main` without duplicating their changes. Continue the main web experience and companion integration in focused increments; backend work remains a later phase.

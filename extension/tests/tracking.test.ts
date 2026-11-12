@@ -233,7 +233,7 @@ test('malformed storage is preserved, and retention is bounded', async () => {
   for (let i = 0; i < MAX_SUMMARIES + 5; i++) state.summaries.push({
     schemaVersion: 1, eventId: String(i), source: 'extension', category: 'Focus',
     startedAtIso: new Date(h.clock.now() - 1000).toISOString(), endedAtIso: new Date(h.clock.now()).toISOString(),
-    activeDurationMs: 1000, timeZone: h.clock.timeZone(), localDate: localDay(h.clock.now()), finalized: true,
+    activeDurationMs: 1000, timeZone: h.clock.timeZone(), localDate: localDay(h.clock.now()), finalized: true, revision: 1, epochId: null,
   })
   assert.equal(prune(state, h.clock.now(), h.clock.timeZone()).summaries.length, MAX_SUMMARIES)
   assert.equal(prune(state, h.clock.now() + RETENTION_MS + 1, h.clock.timeZone()).summaries.length, 0)

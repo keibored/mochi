@@ -1,81 +1,109 @@
-# Mochi Chrome extension — local proof of concept
+# Mochi Chrome extension — local Brave tracking and sync
 
-This Manifest V3 extension estimates active HTTP(S) website time locally and shows a popup report. It does **not** connect to the Mochi dashboard, synchronize rules, or award pet XP or food credits. The web dashboard correctly continues to say tracking is not connected. No backend, accounts, analytics, content scripts, or network sync are included.
+This Manifest V3 extension estimates active HTTP(S) website time locally and shows a popup report. After explicit approval, it sends category/time summaries to the Mochi dashboard at **`http://localhost:5173`**, where validated ingestion awards Focus rewards. There are no accounts, backend, analytics, content scripts, or remote sync service. Extension category rules stay separate from dashboard rules.
 
-## Build and load
+## Rebuild and reload the existing installation
 
-From the repository root, with Node.js 24 and npm installed:
+From `C:\Users\keish\OneDrive\Documents\mochi`, using Node.js 24 and PowerShell:
+
+```powershell
+npm.cmd run build:extension
+npm.cmd run build
+```
+
+The exact extension output folder is:
+
+```text
+C:\Users\keish\OneDrive\Documents\mochi\extension\dist
+```
+
+1. Open **`brave://extensions`** and enable **Developer mode**.
+2. Click **Reload** on your **existing unpacked Mochi extension**. Keep that installation so its rules, preferences, and saved totals remain available. Rebuilding/reloading uses the same folder; do not load a duplicate.
+3. Keep the web dev server running, or start it with `npm.cmd run dev`. Refresh **`http://localhost:5173/`** in **Brave**. Vite is fixed to 5173 with `strictPort`; another port, `127.0.0.1`, HTTPS, or production preview does not match this bridge.
+4. Save or cancel any active timer before first connection. Copy the 32-letter ID from Mochi's popup or `brave://extensions`, paste it into the dashboard, and click **Connect in Brave**.
+5. Open the existing Mochi popup and explicitly approve **`http://localhost:5173`**. Return to the app. Requests expire after two minutes; if expired, request again.
+6. Use **Enable tracking** or **Resume** in the popup if needed. Connection approval preserves the existing enabled/paused preference; it never enables or resumes tracking by itself. A connected app may correctly report **Tracking off**, **Paused**, **Idle**, **Browser unfocused**, or **No supported website**.
+
+For an initial installation only, choose **Load unpacked** and select the folder above, containing the generated `manifest.json`. The implementation requires a Chromium version supporting the extension's Chrome 120+ APIs. Pin/open Mochi through Brave's Extensions menu. Loading alone does not enable tracking.
+
+**Website categories** opens the extension's own settings. Add exact-hostname Focus, Leisure, or Neutral rules there. Unknown websites are Neutral; subdomains need explicit rules. No site intent is assumed. Existing web rules are preserved but are not copied into the extension.
+
+Normal dashboard refresh automatically reuses the saved token. If reconnection is needed, use the exact origin and the same installation's ID, then approve again. Same-epoch reapproval rotates the token without resetting its cutoff or buffer. There is no need to clear browser data.
+
+## Build and test commands
+
+From the repository root:
 
 ```sh
 npm ci
+npm test
 npm run test:extension
+npm run lint
+npm run build
 npm run build:extension
+git diff --check
 ```
 
-In Windows PowerShell, use `npm.cmd` if `npm.ps1` is blocked. The web app's existing `npm run dev`, `npm test`, `npm run lint`, and `npm run build` commands are unchanged. The new extension build separately type-checks its TypeScript and uses Vite to bundle three local entries. Build output is ignored by Git.
-
-1. Open **chrome://extensions** in Chrome 120 or newer.
-2. Enable **Developer mode**.
-3. Click **Load unpacked** and select **`C:\Users\keish\OneDrive\Documents\mochi\extension\dist`** (the `extension/dist` folder containing the generated `manifest.json`, not the repository root or the web app's `dist`).
-4. Pin Mochi through Chrome's Extensions menu, then open its popup.
-5. Choose **Enable tracking**. Installation and loading alone do not enable tracking. The enabled/paused preference persists across browser restarts.
-6. Choose **Website categories** to add exact-hostname Focus, Leisure, or Neutral rules. Rules belong to this extension's `chrome.storage.local`; they are not synchronized with web-app localStorage rules. Unlisted sites are Neutral. Subdomains require explicit rules. No default site intent is assumed.
-
-After source changes, rebuild and click the extension's **Reload** button in chrome://extensions. Reloading drops any unconfirmed tail but preserves saved local aggregates/preferences/rules. No Chrome Web Store listing or installable download is offered.
+Use `npm.cmd` in PowerShell if `npm.ps1` is blocked. The extension build separately type-checks TypeScript and bundles the worker, popup, and options page with Vite. Output is ignored by Git. The web app's `npm run dev` and `npm run preview` remain available; the preview origin is not allowlisted for the local sync bridge.
 
 ## Permissions and official API choices
 
-The implementation was checked against current official Chrome docs:
-
-| Permission | Why it is necessary |
+| API or permission | Purpose |
 | --- | --- |
-| [`tabs`](https://developer.chrome.com/docs/extensions/reference/api/tabs) | Read the active tab's URL transiently to extract a hostname automatically across sites. `activeTab` is temporary and user-invocation-based, so it does not support this continuous opt-in use case. No titles, favicons, page contents, screenshots, or full URLs are stored. This permission can produce Chrome's broad browsing-history wording; no `history` API is requested or used. |
-| [`idle`](https://developer.chrome.com/docs/extensions/reference/api/idle) | Query active/idle/locked state and receive transitions with a 60-second idle threshold. No keystrokes or input contents are observed. |
-| [`storage`](https://developer.chrome.com/docs/extensions/reference/api/storage) | Persist local preferences, explicit category rules, category/day duration aggregates and the last accounting checkpoint. No `storage.sync` is used. |
-| [`alarms`](https://developer.chrome.com/docs/extensions/reference/api/alarms) | Request a supported 30-second checkpoint alarm. Chrome can delay alarms and does not wake sleeping devices for them. Missing alarms are recreated on worker load. |
+| [`tabs`](https://developer.chrome.com/docs/extensions/reference/api/tabs) | Read the active URL transiently to extract a hostname. `activeTab` requires user invocation and cannot provide this continuous opt-in behavior. No title, favicon, page contents, screenshot, or full URL is persisted. Chromium may display broad browsing-history permission wording; the `history` API is not requested or used. |
+| [`idle`](https://developer.chrome.com/docs/extensions/reference/api/idle) | Receive active/idle/locked changes with a 60-second idle threshold; no keystroke or input contents are observed. |
+| [`storage`](https://developer.chrome.com/docs/extensions/reference/api/storage) | Save local preferences, user rules, aggregates, pairing metadata, and the accounting checkpoint. No `storage.sync` is used. |
+| [`alarms`](https://developer.chrome.com/docs/extensions/reference/api/alarms) | Request a 30-second checkpoint alarm. Alarms can be delayed and do not wake sleeping devices; missing alarms are recreated on worker load. |
+| [`windows`](https://developer.chrome.com/docs/extensions/reference/api/windows) | Find the actually focused normal browser window; the popup sender or last-focused window is not proof of focus. |
+| [`runtime` messaging](https://developer.chrome.com/docs/extensions/develop/concepts/messaging#external-webpage) | Receive direct, explicitly approved local web requests through `onMessageExternal`. Callback `sendResponse` uses a literal `return true` to retain the asynchronous response channel. |
+| [`externally_connectable`](https://developer.chrome.com/docs/extensions/reference/manifest/externally-connectable) | Expose messaging to the local host. Manifest match patterns cannot restrict a port; the worker independently requires the exact `http://localhost:5173` origin. |
 
-The [Windows API](https://developer.chrome.com/docs/extensions/reference/api/windows) identifies the actually focused normal browser window; the popup's sender or last-focused window is never treated as proof of focus. No host permissions, `scripting`, `history`, `webNavigation`, `unlimitedStorage`, content scripts, external message listener, or remote JavaScript are requested. All scripts/styles are bundled; CSP also blocks network connections. Incognito is disallowed in the manifest and filtered defensively in code.
+There are no host permissions, `scripting`, `history`, `webNavigation`, `unlimitedStorage`, content scripts, public `window.postMessage` bridge, or remote JavaScript. All scripts/styles are bundled and CSP blocks network connections. Incognito is disallowed and filtered defensively. Only validated category/time DTOs leave the extension; rules, hostname metadata, full URLs, titles, and page contents are excluded from external replies. See [the complete security boundary](../docs/extension-integration.md).
 
 ## Accounting and recovery
 
-The service worker registers tab activation/navigation/removal, window focus/removal, idle, alarm, startup, installation and bundled-page message listeners synchronously. Events and popup/settings requests join one serialized queue; only the worker writes storage. Each successful single-record storage write includes both category totals and the checkpoint. It never advances the in-memory accounting cursor before a successful write. Failure is reported to the UI; the uncommitted tail is discarded on the next successful observation rather than replayed. Malformed data is preserved and reported, not silently reset.
+The worker registers event listeners synchronously. Tab/window/idle/alarm events, internal UI commands, and external sync requests join one serialized queue; only the worker writes extension storage. Each successful single-record write commits both totals and checkpoint. The in-memory accounting cursor never advances before a successful write. A failure is surfaced; the uncommitted tail is discarded on the next successful observation rather than replayed. Malformed data is preserved rather than reset.
 
-Time uses timestamp differences in milliseconds, not background interval ticks. A previous eligible observation is closed at the next observation before changes in tab/category/focus/idle/preference take effect. Eligibility requires tracking enabled and not paused, Chrome idle state active, a focused non-incognito normal browser window, and a loaded active HTTP(S) tab. Browser-internal, extension, unsupported, incognito and loading pages are ignored. Opening the popup queries that actual focused window and does not select a website based on the popup sender.
+Time uses timestamp differences in milliseconds, not interval ticks. A previous eligible observation closes at the next observation before changed tab/category/focus/idle/preferences take effect. Eligibility requires enabled, unpaused tracking, active idle state, a focused non-incognito normal window, and a loaded active HTTP(S) tab. Internal, extension, unsupported, incognito, and loading pages are ignored. Opening a popup queries the actual focused window rather than selecting a website from its sender.
 
 Recovery deliberately favors undercounting:
 
-- A fresh worker, startup or extension reload does **not** backfill from the previous checkpoint. This prevents a persisted active preference from crediting browser-closed time or an unknown worker gap.
-- In a continuously running worker, a gap over **45 seconds**, a backwards clock, or wall-clock/monotonic-clock disagreement over **2 seconds** drops the entire unconfirmed interval. The high-water checkpoint prevents counting wall-clock intervals twice after clock rollback. Large sleep gaps are discarded rather than credited.
-- Even short unknown gaps on worker restart are dropped. Quiet-site time can be undercounted when Chrome repeatedly suspends the worker or delays alarms. A 30-second alarm requests checkpoints but does not keep the worker alive or guarantee exact delivery.
-- Chrome reports idle only after **60 seconds** without input; that grace period can still be classified active. Tab/API/event latency and short sleep/clock changes within the tolerance can introduce small errors. Chrome does not expose a universal sleep-start event here, so these are conservative local estimates, not proof of work or exact OS sleep measurement.
-- Idle/locked, browser blur, pause and off states stop future accumulation. Returning to active/focused state or resuming starts a new observation; inactive gaps are not backfilled. Rest is never inferred.
+- Fresh workers, startup, and reload never backfill the previous checkpoint. A stored enabled preference does not credit browser-closed or unknown-gap time.
+- During a continuous worker lifetime, gaps over **45 seconds**, backwards clocks, or wall/monotonic disagreement over **2 seconds** drop the unconfirmed interval. The high-water checkpoint avoids recounting after rollback. Large sleep gaps are dropped.
+- Quiet-site time can be undercounted when the worker is suspended or alarms are delayed. The 30-second alarm neither keeps it alive nor guarantees delivery.
+- Idle is reported after **60 seconds** without input; that grace period may count as active. API/event latency and short clock/sleep changes introduce uncertainty. These estimates do not verify work or precisely measure all OS sleep.
+- Idle/locked, unfocused, paused, and off states stop accumulation. Returning to active/focused or resuming begins a new observation without backfilling gaps. Rest is never inferred.
 
-The popup refreshes its report every five seconds while open. This is UI sampling, not a per-second background accounting interval. Displayed seconds round down, but all milliseconds remain in stored totals.
+The popup samples its report every five seconds while open; the visible dashboard also requests snapshots about every five seconds. These requests checkpoint accounting, not tick-counting timers. Popup seconds round down while stored totals keep milliseconds.
 
-## Aggregation, privacy, timezone and retention
+## Aggregation, synchronization, and retention
 
-Only user-authored rules contain hostnames. Current hostnames are transient in worker/UI memory. There is no persisted tab/window ID, URL, hostname-visit list, page title/content, query string, fragment, or fine-grained site history. Storage is a separate version-1 record under `mochi.extension.v1`; it never touches `mochi.progress` or web-app pet rewards.
+Only explicit user-authored rules persist hostnames. Current hostname metadata is transient worker/UI state. There is no stored tab/window ID, full URL, hostname-visit list, page title/content, query, fragment, or fine-grained site history.
 
-Daily aggregates are keyed by category, IANA timezone and local date, with an active millisecond total and first/last counted timestamps. The interval can contain inactive gaps; `activeDurationMs` records only eligible segments. Same-category sites are merged, so the stored aggregates do not reveal individual site switches. Rules are normalized and exact-host matched using the web app's pure rule module. Category edits first close any old eligible time, then classify future observations with the new rule.
+Extension data is a **version-2 record under the unchanged `mochi.extension.v1` key**. Migration preserves version-1 preferences, rules, event IDs, totals, and checkpoint without clearing data. The extension never writes the app's `mochi.progress` record itself; the dashboard validates and commits received summaries under its own Web Lock.
 
-Intervals crossing local midnight are split using local calendar arithmetic rather than UTC date slicing or fixed 24-hour days; DST is respected. On a timezone change, discard the uncertain tail and start a new timezone/day aggregate. Prior aggregates keep their original local-date attribution, and today's report sums aggregates bearing today's local date rather than reclassifying history.
+Aggregates are keyed by category, IANA timezone, local date, and synchronization epoch. They carry stable event IDs, cumulative milliseconds, first/last bounds, monotonic revisions, and finalized state. Bounds may contain inactive gaps; only eligible segments enter `activeDurationMs`. Same-category sites merge, so aggregates do not reveal individual site switches. Rule edits close old eligible time and affect only future observations.
 
-Each aggregate receives a random stable event ID on creation. Current-day aggregates are **mutable drafts**, not delivery events. When the day/timezone closes, they become immutable finalized summaries suitable for the proposed `ExtensionActivitySummaryV1` contract after removing the local-only `finalized` marker. If a closed day is revisited after timezone/clock changes, a new aggregate ID is used. No receiver or export/sync is implemented, and drafts must never be retried as immutable events. Future ingestion still needs authenticated validation, a retry ledger and the documented reward-overlap policy before it can award anything.
+Local-midnight splitting uses calendar arithmetic and respects DST. A timezone change drops the uncertain tail and starts a new timezone/day aggregate. Old totals retain their original local date and timezone. Closed aggregates are finalized; revisiting a closed day creates a new ID. Revisioned version-2 wire summaries safely support current-day updates instead of pretending mutable drafts are immutable version-1 events.
 
-Retention is bounded to a rolling **seven days based on aggregate end time**, a maximum of **64 aggregates** (oldest first if unusual timezone changes fill the cap), and **200 category rules**. A still-open daily aggregate can include older portions of that local day. Pruning runs on successful checkpoints; closed-browser data is pruned on the next wake. Uninstalling or clearing extension data removes local progress. Corruption/write failures are surfaced; no data reset tool or server backup exists.
+First connection requires approval in the popup, then a durable web reward reservation, then extension activation. Activation seals old drafts and begins a new epoch cutoff. **Earlier popup totals remain local and are never imported or retroactively rewarded.** Current-epoch summaries sync to the dashboard with stable IDs and revisions; repeated or stale valid snapshots cannot add time or rewards again. Reapproval of the same epoch preserves its buffer and cutoff. A new epoch preserves already accepted web progress but does not backfill prior popup-only time.
 
-## Manual two-site check
+The dashboard captures existing Focus as a baseline and grants only the increase in completed 15-minute blocks, capped at 240 minutes/day including that baseline. Manual/Timer entries still save after reservation but cannot add extra Focus rewards or inflate primary goal progress, including while paused/disconnected. Intentional manual Rest still counts. This avoids double rewards from overlapping self-reports without inventing manual start/end intervals.
 
-1. In extension settings, assign `example.com` to Focus and `example.org` to Leisure. These are your explicit choices, not built-in classifications.
-2. Enable tracking, visit https://example.com, generate normal user input, and stay about 20 seconds. Switch to https://example.org for about 10 seconds. Open the popup: Focus and Leisure should each increase roughly by those durations, with no overlapping totals. Checkpoint/recovery uncertainty means exact seconds are not guaranteed.
-3. Switch to another application for 20 seconds. Return and open the popup; that unfocused interval should not be added. Pause, wait, then Resume; paused time should not increase totals.
-4. Leave input idle for over 60 seconds: Chrome should report Idle (or locked). The first idle-threshold grace period may be counted; further idle time should not be. Generate input to resume.
-5. Change a site's category. Its existing totals remain in the old category; subsequent time goes to the new category. Unknown sites are Neutral.
-6. Close Chrome, wait, reopen it, then inspect the popup. Saved totals/preferences/rules should remain, and closed time must not be credited. Worker restarts may lose the final unconfirmed tail.
-7. Verify the web dashboard is still **not connected** and its XP/credits do not change from extension activity.
+Retention is a rolling **seven days based on aggregate end time**, at most **64 aggregates** and **200 rules**. Pruning occurs on successful checkpoints; old unsynced time can expire before the app returns. The dashboard keeps its accepted ledger independently, so extension pruning does not undo accepted progress. Corruption/write failures are reported; no server backup or reset tool exists.
 
-Mocked deterministic tests cover event accounting and recovery, but do not prove Chrome integration works. Real unpacked-browser verification must be performed separately if browser tooling is unavailable.
+## Manual Brave checks
+
+1. Rebuild/reload/approve using the steps above. If paused/off, confirm connection does not change that preference, then explicitly resume/enable.
+2. Assign `example.com` to Focus and `example.org` to Leisure in extension settings. Browse each actively about 30 seconds, then open the popup and return to the dashboard. Both categories should increase approximately; new post-activation browser entries should be labeled **Extension**. Earlier popup totals need not equal the dashboard.
+3. Switch to another application for 20 seconds; that unfocused time should not be added. Pause, wait, Resume, and confirm paused time is excluded. Changing tabs must count only one active tab.
+4. Leave input idle over 60 seconds; the grace period may count, but later idle time should not. Generate input to resume. No automatic Rest should appear.
+5. Change a site rule: old category totals stay unchanged and future time uses the new category. Unknown sites remain Neutral.
+6. Refresh the app and reopen/reload the extension. Preferences, rules, accepted progress, and pairing should persist; normal app refresh should reconnect without approval. Closing Brave must not credit closed time.
+7. Verify a completed 15-minute Focus block earns 5 XP/2 credits once, subject to baseline/cap. Refresh, retry, and use a second app tab: no duplicate reward. Feed once to spend exactly 2 credits. Optional Manual/Timer Focus saves must not add extra rewards after connection.
+
+The user manually confirmed earlier Focus/Leisure/Neutral tracking and paused popup behavior in Brave. **The new synchronization bridge remains unverified in a real Brave session in this environment.** Deterministic unit and mocked browser-API tests do not prove external message delivery, popup approval, or end-to-end UI behavior. Report actual test runs separately from this checklist.
 
 ## Branch dependency
 
-`feature/browser-tracking` starts from tracking-dashboard commit `ae440d7` and targets `feature/tracking-dashboard` while PR [#2](https://github.com/keibored/mochi/pull/2) is unmerged. That PR in turn depends on timer PR [#1](https://github.com/keibored/mochi/pull/1). Neither is merged automatically. After the parent PRs are merged, retarget/reconcile the base against `main` before merging this extension increment.
+`feature/extension-dashboard-sync` targets `feature/browser-tracking` while [PR #3](https://github.com/keibored/mochi/pull/3) is open and unmerged. PR #3 targets `feature/tracking-dashboard` and depends on [PR #2](https://github.com/keibored/mochi/pull/2), which depends on [timer PR #1](https://github.com/keibored/mochi/pull/1). Leave existing PRs unmerged. Retarget/reconcile dependent bases against `main` after their parents merge.

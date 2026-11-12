@@ -1,46 +1,106 @@
-# Future browser activity integration
+# Local Brave activity integration
 
-This is a design boundary, not an implemented dashboard connection. Mochi's primary experience will be a pet that reacts to browser activity from a companion Chrome extension. A [standalone local extension proof of concept](../extension/README.md) now implements opt-in activity estimates and a popup report with separately stored rules. It has no dashboard receiver, backend, connect action, or pet reward ingestion. The optional web timer and manual logger remain independent tools. Real Chrome integration is unverified until the generated unpacked extension is tested in a browser.
+Mochi's main experience is a web pet reacting to browser activity from its companion extension. This increment implements a local connection between the existing Manifest V3 extension in **Brave** and the app at the exact origin **`http://localhost:5173`**. Manual logging and the focus timer remain optional. There is no backend, account, content-script bridge, or remote sync service.
 
-## Planned flow
+Implemented flow:
 
-Extension → validated activity ingestion → existing reward logic → dashboard.
+**Extension → authenticated, validated category/time ingestion → existing reward rules → dashboard.**
 
-The proposed TypeScript wire contract is `src/integration/extensionActivity.ts`. Each version-1 event contains a globally unique stable `eventId`, literal source `extension`, category (Focus, Leisure, Neutral), UTC ISO start/end timestamps for a half-open interval, integer `activeDurationMs` in milliseconds, IANA `timeZone`, and `localDate` in YYYY-MM-DD form. Events aggregate time by category, not individual page visits. Rest remains intentional and must never be inferred from idle browser time.
+The earlier version-1 shape in `src/integration/extensionActivity.ts` is a legacy/proposed immutable summary boundary. Live synchronization uses the separate **`SyncSummaryV2`** runtime-validated contract in `src/integration/syncDomain.ts` and request/reply types in `syncProtocol.ts`. Mutable current-day drafts are not retried as immutable version-1 events.
 
-The extension PoC reuses this shape for local category/day aggregates, adding a local-only `finalized` boolean. Current-day aggregates are mutable drafts with stable IDs; they are not immutable delivery events. Closed-day/timezone aggregates become immutable finalized summaries, retaining IDs and contents until retention removes them. Future transport must strip `finalized` and send only finalized summaries, or introduce a separately versioned revision protocol for live updates. No transport or receiver exists now, and drafts must not be sent/retried as immutable version-1 events. First/last timestamps bound an aggregate that can contain inactive gaps; `activeDurationMs` includes only the counted segments. The PoC drops unconfirmed worker/restart/sleep tails and bounds retention; see its accounting guide for uncertainty.
+## Connection and lifecycle
 
-## Collection and privacy requirements
+1. The user enters the existing unpacked extension's `[a-p]{32}` ID in the dashboard and requests a connection. The extension ID is also displayed in its popup. The app uses direct callback-style `chrome.runtime.sendMessage(extensionId, request, callback)`.
+2. A random request ID and challenge bind the request. Pending requests expire after **120 seconds**. The extension popup displays the exact origin and requires explicit approval or rejection. Its approval capability is available only to bundled extension pages, not the web request.
+3. Approval alone does not activate ingestion, enable tracking, or resume a paused tracker. The enabled/paused preference stays unchanged. A real connection can correctly report Tracking off or Paused.
+4. Before first activation, the user saves or cancels any active timer. Under the existing Web Lock, the app durably reserves reward authority and captures all already-present Focus totals as the one-time baseline. Existing balances remain authoritative and are never replayed or reduced.
+5. The app requests activation using its durable reservation. The extension seals old drafts, establishes the synchronization cutoff, and starts new epoch-tagged aggregates. Pre-activation totals remain in the popup but are not sent for retroactive reward ingestion.
+6. The app validates the activated cutoff and ingests current-epoch snapshots under its progress lock. Only an actual response followed by successful durable ingestion creates a live connected state and updates last successful sync.
+7. While visible, the app requests snapshots about every **five seconds**; returning to the tab triggers a check. Normal reload reuses the saved token and can recover reservation/activation interrupted by a refresh. No new approval is required for an intact pairing.
 
-- Count only the active tab in the focused browser window while the user is active. Multiple windows must never multiply counted time.
-- Stop accumulation immediately when idle, paused, or the browser loses focus. Do not label those gaps Rest.
-- Apply user-defined exact-hostname rules inside the extension; unknown sites are Neutral. Subdomains require separate rules. Do not hard-code website intent.
-- Split aggregates at local calendar midnight using the event's IANA timezone, including daylight-saving transitions. Flush/restart the aggregate when timezone or category changes. Ingestion must verify that each event belongs to one local day; do not use UTC date slicing or fixed 24-hour arithmetic for local midnight.
-- Sync only category/time aggregates. Do not transmit page contents, page titles, full URLs, hostname visit lists, or browsing history. Website-category rules are explicit user settings, separate from activity telemetry.
+Same-epoch explicit reapproval rotates the token while keeping the original cutoff, buffered summaries, accepted ledger, and reward baseline. A new epoch preserves previously accepted web progress and the baseline, but imports only its own post-cutoff summaries. The previous popup-only history is not replayed.
 
-## Ingestion requirements before enabling a connection
+Live state is ephemeral and becomes unverified after an error, when the app is hidden, or when its verified response is older than **15 seconds**. Last successful sync is historical, not evidence of a currently running tracker. Stored pairings, activity, rules, or a user-controlled toggle never establish connection status.
 
-- Build an authenticated, origin- and sender-validated transport. Do not add an unauthenticated public `message` listener. A local toggle, stored activities, or rule settings must never establish connection/tracking/paused state; those states require a real integration handshake and live lifecycle messages.
-- Validate the schema version and exact source, category, stable event ID, ISO timestamps, positive integer millisecond duration (no greater than the interval), valid IANA timezone, and consistent local date. Reject unsupported fields/versions and implausible or inconsistent intervals. A TypeScript interface alone is not runtime validation.
-- Persist an accepted-event ledger and activity/reward updates atomically under the existing shared progress lock (or a server transaction in a later backend). Retrying the same event ID must never add time or rewards again. The same ID with different contents is a conflict, not another event.
-- Retain sub-minute millisecond remainders per local day; never round each incoming event up. Adapt accumulated eligible Focus time to the existing 15-minute reward blocks and 240-minute daily cap without losing remainders or re-awarding earlier blocks. Current manual/timer reward behavior remains unchanged until ingestion is implemented.
+## Transport and validation boundary
 
-## Overlap and reward authority policy to implement
+The [Chrome external-webpage messaging API](https://developer.chrome.com/docs/extensions/develop/concepts/messaging#external-webpage) is used directly. The worker registers `runtime.onMessageExternal` synchronously and retains asynchronous callback replies with a literal `return true` plus `sendResponse`. There is no public `window` message listener, injected script, content script, HTTP receiver, or extension discovery endpoint.
 
-Current Manual entries describe self-reported minutes, not reliable start/end intervals, so their timestamps must not be treated as proof that they do or do not overlap tracked time. Existing saved balances must never be replayed or reduced.
+The manifest's [`externally_connectable`](https://developer.chrome.com/docs/extensions/reference/manifest/externally-connectable) pattern permits `http://localhost/*`; match patterns do not encode the port. Therefore the worker separately validates **`http://localhost:5173`** from the browser-supplied sender URL/origin. Other hostnames, schemes, and ports are rejected. The app transport also checks its own exact origin. Vite uses `port: 5173` and `strictPort: true` so development cannot silently move to a different origin.
 
-Before accepting the first tracked event, establish a persisted, verified reward-authority cutoff. Resolve any active timer (save or cancel it with the user's direction) before activating that cutoff. Accept extension events only at or after it. Prior activities and balances remain intact.
+External validation rejects other extension senders, incognito senders, child-frame sender information, unsupported protocol/version/kind/fields, expired or mismatched request challenges, and missing or incorrect pairing tokens/epochs. Popup commands use the existing bundled-page sender checks and the popup-only approval capability. Internal report/settings commands are not exposed externally. Public failures do not include saved tokens or raw progress records.
 
-During the extension-authoritative period, only validated extension Focus aggregates earn new focus rewards. Manual and Timer tools may record time, but must clearly explain that they do not add reward-eligible focus during this period. This conservative policy prevents double rewards without inventing intervals for manual entries. Source totals must stay distinguishable so overlapping self-reports do not inflate the primary tracked summary or goal progress.
+Only explicit category/time DTOs are returned to the app. External replies never include hostname metadata, full URLs, page titles, page contents, website rules, or visit history. The extension's bundled-only CSP and `connect-src 'none'` remain in force. Authentication here scopes the local bridge to the approved origin/installation; it is not a server account or a defense against malicious code already running in that trusted app origin or manual editing of browser storage.
 
-Pausing, losing a connection, or having buffered events must not automatically switch reward authority back to manual/timer. Any future transition back needs an explicit persisted cutoff and reconciliation of buffered event IDs before local tools can earn rewards again. Document and test those transitions before connecting the extension. None of this authority switching or ingestion is implemented now; current manual/timer entries continue earning their existing rewards.
+## Version-2 summary contract
 
-## Current hostname settings
+| Field | Meaning |
+| --- | --- |
+| `schemaVersion: 2` | Version of the transmitted summary schema. |
+| `source: 'extension'` | Literal browser source, distinct from existing Manual/Timer activities. |
+| `epochId` | Approved activation epoch. Only the currently active epoch may ingest new summaries. |
+| `eventId` | Stable aggregate identity for retry/refresh/cross-tab deduplication. |
+| `revision` | Positive monotonic cumulative revision for that event. |
+| `category` | Focus, Leisure, or Neutral. Rest is intentionally logged, never inferred. |
+| `startedAtIso`, `endedAtIso` | Canonical UTC ISO bounds of a half-open aggregate interval. Bounds can include inactive gaps. |
+| `activeDurationMs` | Positive safe integer milliseconds of counted eligible time, no greater than the enclosing interval. |
+| `timeZone` | IANA timezone used when the aggregate was created. |
+| `localDate` | Original local calendar date in `YYYY-MM-DD` form. |
+| `finalized` | Whether the aggregate is closed and immutable. |
 
-Users can add, edit, and remove rules in the web app. They are saved in the existing versioned progress record using the same cross-tab coordination as the timer. Normalization accepts a hostname or HTTP(S) URL, canonicalizes case and internationalized domain names, removes a trailing DNS dot, and discards paths, query strings, fragments and URL ports. Credentials, unsupported protocols, invalid DNS labels, and duplicate normalized hostnames are rejected. IP literals and localhost are supported; a port requires a full HTTP(S) URL. No seeded website rules are supplied.
+Runtime validation checks exact keys, literals, IDs, integer ranges, ISO timestamps, timezone validity, local-day consistency, cutoff/epoch membership, and bounds not extending past ingestion. Unsupported fields and versions are rejected rather than ignored. The whole batch succeeds atomically or leaves prior data unchanged.
 
-Rules match exact normalized hostnames only. `example.com` does not include `www.example.com`, `work.example.com`, or `notexample.com`; no parent-domain precedence is needed. Unknown sites are Neutral. Rule edits affect only future categorization, never existing activities, XP, spent credits, goals, or active timers.
+For an existing event ID:
 
-## Branch dependency
+- An identical revision is a no-op; conflicting contents at that revision are rejected.
+- A consistent older revision cannot reduce or add accepted totals.
+- A newer revision must retain identity/category/start/day/timezone, and may only increase duration/end bounds or finalize the aggregate.
+- A finalized aggregate cannot subsequently change. Reopening a previously closed local day creates a new ID.
 
-`feature/tracking-dashboard` is stacked on `feature/focus-timer` at commit `233bb7d` and depends on timer PR [#1](https://github.com/keibored/mochi/pull/1), which was open and unmerged when this branch was created. Its PR targets `feature/focus-timer` so the diff contains only the tracking-dashboard increment. Leave both PRs unmerged for review. After PR #1 is merged, retarget the tracking-dashboard PR to `main` and reconcile its base before merging; do not duplicate the timer changes or silently discard them.
+The accepted ledger is retained across reconnects and written with XP/credit changes in one versioned web record under the shared Web Lock. A late response from another pairing epoch is rejected even when its snapshot list is empty. Extension event processing and storage writes also use one serialized worker queue.
+
+## Collection, calendar, and privacy rules
+
+- Count only the active tab in the actually focused normal browser window while tracking is enabled, unpaused, and the user is active. Multiple windows/tabs never multiply counted time.
+- Stop accumulation on idle/locked, pause, or lost browser focus. Internal, unsupported, loading, and incognito pages do not count. No gap is automatically labeled Rest.
+- Apply user-authored exact-hostname categories in the extension. Unknown sites are Neutral. Do not assume that any named website always implies Focus or Leisure.
+- Split intervals at local midnight with calendar arithmetic, respecting DST rather than slicing UTC dates or assuming 24-hour local days. Timezone changes drop the uncertain tail and start a new timezone/day aggregate. Ingestion verifies one original local day per summary.
+- Aggregate by category/day/timezone, not page visits. Only user-authored rules persist hostnames. Sync sends no rule list, URL, hostname visit list, title, page contents, or browsing history.
+
+Worker restarts and unconfirmed gaps are not proof of ongoing activity. The current implementation deliberately drops unconfirmed restart tails, gaps over 45 seconds, backwards clocks, and wall/monotonic discrepancies over two seconds. Idle has a 60-second grace period, and alarms may be delayed. These are local activity estimates, not verified work. See [extension accounting details](../extension/README.md).
+
+## Reward authority and overlap policy
+
+Manual entries describe self-reported minutes, not reliable start/end intervals. Their timestamps do not prove that they avoid tracked time. Existing XP and spent credits must not be recalculated during migration or pairing.
+
+The first durable reservation captures **all already-saved Focus activities** as the baseline, including equality at the reservation millisecond or timestamps affected by clock changes. The initial active timer must be resolved by the user first. Extension acceptance begins no earlier than its activated cutoff; the short reserve-to-activate gap is not backfilled.
+
+Reward calculations use the captured Focus baseline plus accepted extension Focus milliseconds per original local date. They award only the difference in completed **15-minute blocks**, at **5 XP and 2 credits** each, capped at **240 Focus minutes/day**, including the baseline. Millisecond remainders carry across revisions and summaries without rounding. Leisure and Neutral grant no rewards and never subtract them. Feeding still subtracts exactly 2 credits without changing XP.
+
+Once authority is reserved, Manual and Timer entries remain available and save accurately labeled history, but cannot add extra Focus rewards or inflate primary Focus goal progress. The dashboard's primary Focus total is the captured baseline plus accepted browser Focus. Other primary category totals combine earlier saved entries with synced categories; intentional manual Rest continues to count. Goal edits never recalculate rewards.
+
+Pause, disconnect, missing messages, and buffered activity **never switch reward authority back** to local tools. This remains true if activation was interrupted after reservation. There is no automatic or implicit reset. A future switch back would need a separately specified persisted cutoff and buffered-event reconciliation before local tools could earn again.
+
+## Persistence, compatibility, and rule ownership
+
+The web record migrates from version 4 to **version 5** under `mochi.progress`, preserving adoption, XP, spent credits, activities/IDs/timestamps/notes/source labels, goals, rules, and the entire timer session. Older supported versions still use their structural migrations. The new fields hold pairing, authority/baseline, accepted summaries, and last successful sync. Migration never imports extension time or replays rewards.
+
+Extension state migrates from version 1 to **version 2** under the unchanged `mochi.extension.v1` key. Existing enable/pause preferences, rules, aggregates, event IDs, and checkpoint survive. Older extension aggregates stay local until retention; first activation cannot retroactively reward them.
+
+Both surfaces validate storage and preserve malformed/unsupported records rather than overwriting them. Sync requires durable storage and Web Locks. A failed durable save cannot establish a successful sync or fall back to in-memory rewards. The extension retains seven days/64 aggregates/200 rules, so unsynced activity can expire. Already accepted web progress is independent of extension retention. The web ledger can eventually reach localStorage limits; there is no backend backup or cross-device sync.
+
+Dashboard rules and extension rules intentionally remain separate. Normalization accepts a hostname or HTTP(S) URL; it canonicalizes case/IDNs, removes trailing DNS dots, and discards paths, queries, fragments, and URL ports. Unsupported protocols, credentials, invalid DNS labels, and normalized duplicates are rejected. IP literals/localhost are supported; a port requires a full HTTP(S) URL. Rules match exact hostnames only: `example.com` does not include `www.example.com`, `work.example.com`, or `notexample.com`. No parent-domain precedence or default website intent is assumed. Edits affect only future classification and never reclassify old entries or replay rewards.
+
+## Reproduction and verification
+
+Exact commands, folder, and approval steps are in [README.md](../README.md#rebuild-reload-and-connect-in-brave) and the [extension guide](../extension/README.md). Rebuild with `npm.cmd run build:extension`, reload the **existing** installation at `brave://extensions`, refresh `http://localhost:5173/`, enter its ID, request the connection, and approve that exact origin in the popup. Explicitly enable/resume tracking if needed; approval preserves that preference.
+
+Test two user-classified sites, actual tracking states, refresh/token restoration, concurrent tabs/retries, baseline/cap rewards, intentional Rest, optional-tool overlap, and persisted category rules. Relevant commands are `npm test`, `npm run test:extension`, `npm run lint`, `npm run build`, `npm run build:extension`, and `git diff --check` (use `npm.cmd` in PowerShell when needed).
+
+The user has verified the earlier extension's categories and paused popup manually in Brave. The **new local sync bridge has no real-browser verification in this environment**. Unit and mocked API tests cannot prove actual Brave external delivery, popup approval, keyboard/layout behavior, or end-to-end reward updates. Do not present this documentation's manual checklist as completed testing.
+
+## Branch dependency and later scope
+
+`feature/extension-dashboard-sync` is based on `feature/browser-tracking` and targets it while [PR #3](https://github.com/keibored/mochi/pull/3) remains unmerged. That branch depends on [tracking dashboard PR #2](https://github.com/keibored/mochi/pull/2) and [timer PR #1](https://github.com/keibored/mochi/pull/1). Leave all existing PRs unmerged for review; reconcile/retarget after parent merges instead of duplicating or discarding their changes.
+
+Backend/accounts, device sync, automatic rule synchronization, production-origin configuration, and distribution remain later work. This increment implements only the local approved Brave-to-main-web-app connection.

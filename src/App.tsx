@@ -3,13 +3,15 @@ import type { FormEvent } from 'react'
 import { FocusTimer } from './FocusTimer'
 import { ActiveTimerNotice } from './ActiveTimerNotice'
 import { WebsiteRulesSettings } from './WebsiteRulesSettings'
+import { ExtensionConnection } from './ExtensionConnection'
 import { useProgress } from './useProgress'
-import { ACTIVITY_CATEGORIES, dailySummary, FEED_COST, FIRST_MILESTONE_XP, isActivityCategory, isValidDuration, isValidGoal, localDateKey, MAX_NOTE_LENGTH, MIN_FOCUS_GOAL, MAX_FOCUS_GOAL } from './rewards'
+import { ACTIVITY_CATEGORIES, FEED_COST, FIRST_MILESTONE_XP, isActivityCategory, isValidDuration, isValidGoal, localDateKey, MAX_NOTE_LENGTH, MIN_FOCUS_GOAL, MAX_FOCUS_GOAL } from './rewards'
 import type { ActivityCategory } from './rewards'
+import { dashboardSummary, formatMinutes, recentActivityView } from './integration/activityView'
 import './App.css'
 
 function App() {
-  const { pet, dispatch, storageNotice, canPersist, busy } = useProgress()
+  const { pet, dispatch, commitSync, storageNotice, canPersist, busy } = useProgress()
   const recordingTools = useRef<HTMLDetailsElement>(null)
   const [toolsOpen, setToolsOpen] = useState(false)
   const [duration, setDuration] = useState('')
@@ -89,9 +91,10 @@ function App() {
     setFeedback('Yum! Mochi loved that little treat. Thank you for taking care of me!')
   }
 
-  const summary = dailySummary(pet.activities, today)
+  const summary = dashboardSummary(pet.activities, pet.extensionSync, today)
   const todayMinutes = summary.Focus
-  const recentActivities = [...pet.activities].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp)).slice(0, 5)
+  const recentActivities = recentActivityView(pet.activities, pet.extensionSync)
+  const browserAuthoritative = pet.extensionSync.authorityStartedAt !== null
 
   if (!pet.adopted) {
     return (
@@ -137,16 +140,11 @@ function App() {
             <button className="adopt-button" type="button" disabled={busy || pet.foodCredits < FEED_COST} onClick={() => void feed()} aria-describedby="feeding-help">
               Feed Mochi · {FEED_COST} credits
             </button>
-            <p id="feeding-help" className="help-text">Log 15 minutes of focus to earn 2 food credits for a treat.</p>
+            <p id="feeding-help" className="help-text">{browserAuthoritative ? 'Every 15 accumulated browser Focus minutes earns 2 food credits for a treat.' : 'Log 15 minutes of focus to earn 2 food credits for a treat.'}</p>
             <p className="feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
           </section>
           <div className="focus-column">
-            <section className="panel tracking-status" aria-labelledby="tracking-heading">
-              <p className="welcome-label">BROWSER ACTIVITY</p>
-              <h2 id="tracking-heading">Browser tracking isn’t connected yet.</h2>
-              <p>Once connected, Mochi will summarize time on your active websites using your categories.</p>
-              <p className="help-text">The local Chrome extension proof of concept is not connected to this dashboard. Current totals contain only activities you have saved.</p>
-            </section>
+            <ExtensionConnection pet={pet} commitSync={commitSync} canPersist={canPersist} />
             {pet.timer && !toolsOpen && <ActiveTimerNotice session={pet.timer} openTools={() => {
               if (recordingTools.current) {
                 recordingTools.current.open = true
@@ -155,21 +153,22 @@ function App() {
             }} />}
             <section className="panel summary-card" aria-labelledby="summary-heading">
               <h2 id="summary-heading">Today’s activity</h2>
-              <p className="help-text">Saved activity minutes · your local calendar day</p>
+              <p className="help-text">{browserAuthoritative ? 'Synced browser time, earlier saved entries, and intentional Rest · local calendar day' : 'Saved activity minutes · your local calendar day'}</p>
               <dl className="daily-summary">
-                {ACTIVITY_CATEGORIES.map((item) => <div key={item}><dt>{item}</dt><dd>{summary[item]} <span>min</span></dd></div>)}
+                {ACTIVITY_CATEGORIES.map((item) => <div key={item}><dt>{item}</dt><dd>{formatMinutes(summary[item])} <span>min</span></dd></div>)}
               </dl>
-              <label className="milestone-label" htmlFor="goal-progress">{todayMinutes} / {pet.dailyFocusGoal} focus minutes</label>
+              <label className="milestone-label" htmlFor="goal-progress">{formatMinutes(todayMinutes)} / {pet.dailyFocusGoal} focus minutes</label>
               <progress id="goal-progress" max={pet.dailyFocusGoal} value={Math.min(todayMinutes, pet.dailyFocusGoal)} />
+              {browserAuthoritative && <p className="help-text">Browser minutes are displayed to 0.01 minute; rewards use exact elapsed milliseconds. Tracking keeps each day’s original local date and timezone.</p>}
               {todayMinutes >= pet.dailyFocusGoal && <p className="goal-complete">Your focus goal is complete. Make room for a little rest ♡</p>}
             </section>
             <section className="panel activity-card" aria-labelledby="activity-heading">
               <h2 id="activity-heading">Recent activities</h2>
-              {pet.activities.length === 0 ? <p className="empty-state">A fresh little start. Your saved activities will appear here.</p> : (
+              {recentActivities.length === 0 ? <p className="empty-state">A fresh little start. Your saved activities will appear here.</p> : (
                 <ul className="activity-list">
                   {recentActivities.map((activity) => (
                     <li key={activity.id}>
-                      <div><strong>{activity.category} · {activity.duration} minutes</strong><span>{activity.source}</span>{activity.note && <p className="activity-note">{activity.note}</p>}</div>
+                      <div><strong>{activity.category} · {formatMinutes(activity.duration)} minutes</strong><span>{activity.source}{activity.source === 'Extension' ? ' · cumulative browser activity' : ''}</span>{activity.note && <p className="activity-note">{activity.note}</p>}</div>
                       <time dateTime={activity.timestamp}>{new Date(activity.timestamp).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
                     </li>
                   ))}
@@ -179,11 +178,12 @@ function App() {
             <details id="recording-tools" className="recording-tools" ref={recordingTools} onToggle={(event) => setToolsOpen(event.currentTarget.open)}>
               <summary>Other ways to record time<span>Optional focus timer and manual logging</span></summary>
               <div className="optional-tools-content">
+                {browserAuthoritative && <p className="optional-tools-notice">These tools still save entries to your history. Browser tracking supplies new Focus rewards and primary activity totals, so optional Focus entries do not add rewards or goal progress. This also applies while tracking is paused or disconnected. Intentional Rest still counts.</p>}
                 <FocusTimer session={pet.timer} dispatch={dispatch} canPersist={canPersist} busy={busy} />
                 <section className="panel focus-card" aria-labelledby="focus-heading">
                   <p className="welcome-label">YOUR LITTLE STEPS</p>
                   <h2 id="focus-heading">Log an activity</h2>
-                  <p>Add time you have already spent. Entries are manually logged time; Mochi does not track your activity.</p>
+                  <p>Add time you have already spent. These entries are manually logged time, separate from the optional browser integration.</p>
                   <form onSubmit={logActivity} noValidate>
                     <label htmlFor="activity-category">Category</label>
                     <select id="activity-category" value={category} onChange={(event) => {
@@ -205,7 +205,7 @@ function App() {
                     {noteError && <p id="note-error" className="field-error" role="alert">{noteError}</p>}
                     <button className="adopt-button" type="submit" disabled={busy}>Save activity ♡</button>
                   </form>
-                  <p className="reward-note">Only Focus earns rewards: every 15 minutes in a local calendar day earns 5 XP + 2 food credits. Partial focus minutes add up across entries. Rewards cover the first 240 focus minutes each day; all logged time still counts. Leisure, Rest, and Neutral never subtract XP or credits.</p>
+                  <p className="reward-note">{browserAuthoritative ? 'Manual entries are saved without extra rewards. Only browser Focus earns new XP and credits after the first connection; this avoids rewarding overlapping time twice. Rest remains part of your daily summary.' : 'Only Focus earns rewards: every 15 minutes in a local calendar day earns 5 XP + 2 food credits. Partial focus minutes add up across entries. Rewards cover the first 240 focus minutes each day; all logged time still counts. Leisure, Rest, and Neutral never subtract XP or credits.'}</p>
                 </section>
               </div>
             </details>

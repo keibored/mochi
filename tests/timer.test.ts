@@ -150,7 +150,7 @@ test('version-2 activities migrate to Manual preserving notes, balances and goal
   const old = { version: 2, adopted: true, name: 'Mochi', xp: 10, foodCredits: 2, dailyFocusGoal: 90,
     activities: [{ id: 'old-rest', category: 'Rest', duration: 10, note: 'Cozy break', timestamp: new Date(start).toISOString() }] }
   const migrated = migratePet(old)!
-  assert.equal(migrated.version, 4)
+  assert.equal(migrated.version, 5)
   assert.equal(migrated.timer, null)
   assert.deepEqual([migrated.xp, migrated.foodCredits, migrated.dailyFocusGoal], [10, 2, 90])
   assert.deepEqual(migrated.activities, [{ ...old.activities[0], source: 'Manual' }])
