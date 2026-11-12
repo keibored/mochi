@@ -1,16 +1,18 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mochi website categories</title></head>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Adjust Mochi website categories</title></head>
 <body><main class="options">
   <header>mochi ♡ <span>extension settings</span></header>
-  <h1>Website categories</h1>
-  <p>Choose what each website means for your day. Unknown hostnames are Neutral. Rest is intentional and is never inferred from idle time.</p>
-  <p class="hint">These rules belong only to this extension and will not be overwritten by web-app rules. An explicitly approved local dashboard receives category/time summaries, not these rules. Exact hostnames only: example.com does not include www.example.com. Changes apply to future time only.</p>
+  <h1>Adjust website categories</h1>
+  <p>Automatic categories are ready without setup. They estimate a website's usual purpose, not your intent. Unknown and mixed-purpose websites record Neutral time. Rest is intentional and is never inferred from idle time.</p>
+  <p class="hint">Overrides are optional and take priority over automatic categories. Removing an override restores the automatic category or Neutral fallback. Your overrides match exact hostnames only: example.com does not include www.example.com. The bundled catalog includes subdomains only where explicitly configured.</p>
+  <p class="hint">These overrides belong only to this extension and will not be overwritten by web-app rules. An explicitly approved local dashboard receives category/time summaries, not these rules. Changes apply to future time only; saved activities and rewards are unchanged.</p>
   <form id="rule-form" class="card" novalidate>
     <label for="hostname">Hostname or HTTP(S) URL</label>
-    <input id="hostname" type="text" maxlength="4096" autocapitalize="none" spellcheck="false" aria-describedby="host-help error">
+    <input id="hostname" type="text" maxlength="4096" autocapitalize="none" spellcheck="false" aria-describedby="host-help classification-preview error">
     <p id="host-help" class="hint">Only the hostname is saved. Paths, queries, fragments and URL ports are discarded; login details and unsupported protocols are rejected.</p>
-    <label for="category">Category</label><select id="category"><option>Neutral</option><option>Focus</option><option>Leisure</option></select>
-    <div class="actions"><button id="save-rule" type="submit">Save rule ♡</button><button id="cancel-edit" class="secondary" type="button" hidden>Cancel edit</button></div>
+    <p id="classification-preview" class="hint"></p>
+    <label for="category">Your override category</label><select id="category"><option>Neutral</option><option>Focus</option><option>Leisure</option></select>
+    <div class="actions"><button id="save-rule" type="submit">Save override ♡</button><button id="cancel-edit" class="secondary" type="button" hidden>Cancel edit</button></div>
     <p id="error" class="error" role="alert"></p>
   </form>
   <p id="feedback" role="status" aria-live="polite"></p>

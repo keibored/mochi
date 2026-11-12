@@ -22,7 +22,7 @@ export function ExtensionConnection(props: ExtensionSyncProps) {
       <div role="status" aria-live="polite" aria-atomic="true">
         <h2 id="tracking-heading">{sync.connected ? `Browser connected · ${sync.liveStatus}` : sync.pending ? 'Approve your connection in Brave.' : 'Browser tracking isn’t connected yet.'}</h2>
       </div>
-      <p>{sync.connected ? 'Your extension is sending real activity totals. Tracking pauses when you are idle, the browser loses focus, or you pause it in the popup.' : 'Once connected, Mochi will summarize time on your active websites using your categories.'}</p>
+      <p>{sync.connected ? 'Your extension is sending real activity totals. Tracking pauses when you are idle, the browser loses focus, or you pause it in the popup.' : 'Once connected, Mochi will summarize time on your active websites using automatic categories and your optional overrides.'}</p>
       {lastSync !== null && <p className="help-text">Last successful sync: <time dateTime={new Date(lastSync).toISOString()}>{new Date(lastSync).toLocaleString()}</time>. {sync.connected ? '' : 'These are saved totals; the current tracking state is unverified.'}</p>}
       {!sync.connected && (
         <form className="extension-connection-form" onSubmit={requestConnection} noValidate>
@@ -43,7 +43,7 @@ export function ExtensionConnection(props: ExtensionSyncProps) {
       )}
       {sync.pending && <p className="connection-pending">Open Mochi’s popup in Brave now and approve the exact origin above. This request expires after two minutes.</p>}
       <p className="help-text" role="status" aria-live="polite" aria-atomic="true">{sync.notice}</p>
-      <p className="help-text">Local connection only: no accounts or remote service. Category rules are managed in the extension’s settings; dashboard rules are kept separately.</p>
+      <p className="help-text">Automatic categories estimate website purpose, not your intent. Unknown and mixed-purpose sites record Neutral time without setup. Use Adjust website categories in the extension for optional overrides. Dashboard overrides are kept separately. This is a local connection with no accounts or remote service.</p>
       {authorityStarted && <p className="tracking-authority-note">Browser tracking is the source for new Focus rewards and daily totals. Manual and timer entries still save to history, but do not add extra Focus XP, food credits, or focus progress—even while tracking is paused or disconnected. Intentional Rest entries still count.</p>}
     </section>
   )

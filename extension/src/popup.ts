@@ -5,7 +5,7 @@ import type { Report } from './controller'
 let busy = false
 function render(report: Report) {
   element('status').textContent = report.status
-  element('current').textContent = report.hostname ? `${report.hostname} · ${report.category}` : 'No eligible website is currently being counted.'
+  element('current').textContent = report.hostname ? `${report.hostname} · ${report.category} · ${report.classificationOrigin}` : 'No eligible website is currently being counted.'
   const controls = element('controls')
   controls.replaceChildren()
   if (!report.state.enabled) controls.append(button('Enable tracking', () => void update('enable')))
@@ -24,7 +24,7 @@ function render(report: Report) {
     value.textContent = `${Math.floor(seconds / 60)}m ${seconds % 60}s`
     row.append(title, value); totals.append(row)
   }
-  element('empty').textContent = Object.values(report.totalsMs).every((total) => total === 0) ? 'No time recorded today. Enable tracking, categorize a website, and browse actively.' : 'Millisecond precision is retained locally; displayed seconds are rounded down.'
+  element('empty').textContent = Object.values(report.totalsMs).every((total) => total === 0) ? 'No time recorded today. Enable tracking and browse actively. Automatic categories are ready; unknown sites record Neutral time.' : 'Millisecond precision is retained locally; displayed seconds are rounded down.'
   const pairing = element('pairing')
   pairing.replaceChildren()
   const pending = report.state.pendingPairing

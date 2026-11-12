@@ -18,7 +18,7 @@ test('approved callback transport imports real producer revisions into durable w
   const api: ChromeApi = {
     runtime: { id: extensionId, getURL: (path) => `chrome-extension://${extensionId}/${path}`,
       onStartup: events, onInstalled: events, onMessage: events, sendMessage: async () => undefined, openOptionsPage: async () => undefined },
-    tabs: { query: async () => [{ id: 1, windowId: 1, active: true, incognito: false, url: 'https://study.example/private?q=not-synced', status: 'complete' }],
+    tabs: { query: async () => [{ id: 1, windowId: 1, active: true, incognito: false, url: 'https://developer.mozilla.org/private?q=not-synced', status: 'complete' }],
       onActivated: events, onUpdated: events, onRemoved: events },
     windows: { getAll: async () => [{ id: 1, focused: true, incognito: false }], onFocusChanged: events, onRemoved: events },
     idle: { queryState: async () => 'active', setDetectionInterval: () => undefined, onStateChanged: events },
@@ -30,7 +30,7 @@ test('approved callback transport imports real producer revisions into durable w
   const historical = petReducer(petReducer(freshPet(), { type: 'adopt' }), { type: 'log', activity: {
     id: 'old-focus', source: 'Manual', category: 'Focus', duration: 10, note: '', timestamp: new Date(now - 60_000).toISOString(),
   } })
-  historical.websiteRules = [{ hostname: 'study.example', category: 'Neutral' }]
+  historical.websiteRules = [{ hostname: 'developer.mozilla.org', category: 'Neutral' }]
   let webRecord = JSON.stringify(historical)
   let lockQueue = Promise.resolve()
   Object.defineProperty(globalThis, 'window', { configurable: true, value: {
@@ -50,8 +50,12 @@ test('approved callback transport imports real producer revisions into durable w
       void tracker.external(message, { url: `${APP_ORIGIN}/`, origin: APP_ORIGIN, frameId: 0 }).then(callback)
     },
   } } })
-  await tracker.run({ kind: 'rule-save', hostname: 'study.example', category: 'Focus' })
-  await tracker.run({ kind: 'enable' })
+  const enabled = await tracker.run({ kind: 'enable' })
+  assert.equal(enabled.ok, true)
+  if (!enabled.ok) throw new Error(enabled.error)
+  assert.equal(enabled.report.category, 'Focus')
+  assert.equal(enabled.report.classificationOrigin, 'Automatic')
+  assert.deepEqual(enabled.report.state.rules, [], 'browser Focus works without category setup')
   now += 5000; monotonic += 5000
   await tracker.run()
 
@@ -79,6 +83,23 @@ test('approved callback transport imports real producer revisions into durable w
   assert.deepEqual([readPet().xp, readPet().foodCredits], [5, 2], 'historical 10 + new browser 5 earns exactly one block')
   assert.deepEqual(readPet().websiteRules, historical.websiteRules)
   assert.equal(readPet().activities.length, 1)
+  const focusBeforeOverride = structuredClone(snapshot.summaries[0])
+  await tracker.run({ kind: 'rule-save', hostname: 'developer.mozilla.org', category: 'Neutral' })
+  now += 30_000; monotonic += 30_000
+  await tracker.run({ kind: 'rule-remove', hostname: 'developer.mozilla.org' })
+  const changedCategory = await callExtension(extensionId, { kind: 'sync', token: approval.token, epochId: approval.epochId })
+  if (changedCategory.kind !== 'snapshot') throw new Error('Category snapshot missing')
+  assert.deepEqual(changedCategory.summaries.find((entry) => entry.eventId === focusBeforeOverride.eventId), focusBeforeOverride,
+    'changing category cannot rewrite a synced Focus summary')
+  assert.equal(changedCategory.summaries.find((entry) => entry.category === 'Neutral')?.activeDurationMs, 30_000)
+  await Promise.all([1, 2].map(() => transactPet({ type: 'sync-ingest', epochId: changedCategory.epochId, snapshots: changedCategory.summaries, now })))
+  assert.deepEqual([readPet().xp, readPet().foodCredits], [5, 2], 'Neutral override time and retrying unchanged Focus cannot grant rewards')
+  now += 30_000; monotonic += 30_000
+  const automaticRestored = await callExtension(extensionId, { kind: 'sync', token: approval.token, epochId: approval.epochId })
+  if (automaticRestored.kind !== 'snapshot') throw new Error('Automatic snapshot missing')
+  assert.equal(automaticRestored.summaries.find((entry) => entry.category === 'Focus')?.activeDurationMs, 5.5 * 60_000)
+  await transactPet({ type: 'sync-ingest', epochId: automaticRestored.epochId, snapshots: automaticRestored.summaries, now })
+  assert.deepEqual([readPet().xp, readPet().foodCredits], [5, 2], 'removing an override restores only future automatic Focus')
   await transactPet({ type: 'log', activity: { id: 'optional-overlap', source: 'Manual', category: 'Focus', duration: 30, note: '', timestamp: new Date(now).toISOString() } })
   assert.deepEqual([readPet().xp, readPet().foodCredits], [5, 2])
   await transactPet({ type: 'feed' })
@@ -86,5 +107,5 @@ test('approved callback transport imports real producer revisions into durable w
   const restored = await callExtension(extensionId, { kind: 'sync', token: approval.token, epochId: approval.epochId })
   if (restored.kind !== 'snapshot') throw new Error('Restored snapshot missing')
   await transactPet({ type: 'sync-ingest', epochId: restored.epochId, snapshots: restored.summaries, now })
-  assert.deepEqual([readPet().xp, readPet().foodCredits, readPet().extensionSync.summaries.length], [5, 0, 1])
+  assert.deepEqual([readPet().xp, readPet().foodCredits, readPet().extensionSync.summaries.length], [5, 0, 2])
 })

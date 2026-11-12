@@ -76,6 +76,78 @@ test('tracking is opt-in, does not inspect tab URLs while off, and persists pref
   assert.equal(isTrackingState(h.raw()), true)
 })
 
+test('automatic categories count Focus, Leisure and unknown Neutral without saved rules', async () => {
+  const h = harness(), tracker = h.tracker()
+  h.set({ url: 'https://developer.mozilla.org/en-US/docs/Web' })
+  const enabled = report(await tracker.run({ kind: 'enable' }))
+  assert.deepEqual(enabled.state.rules, [])
+  assert.equal(enabled.category, 'Focus')
+  assert.equal(enabled.classificationOrigin, 'Automatic')
+  h.advance(4000); h.set({ url: 'https://www.netflix.com/watch/123' })
+  const leisure = report(await tracker.run())
+  assert.equal(leisure.category, 'Leisure')
+  assert.equal(leisure.classificationOrigin, 'Automatic')
+  h.advance(3000); h.set({ url: 'https://unlisted.example/private' })
+  const unknown = report(await tracker.run())
+  assert.equal(unknown.category, 'Neutral')
+  assert.equal(unknown.classificationOrigin, 'Unclassified')
+  h.advance(2000)
+  const result = report(await tracker.run())
+  assert.deepEqual(result.totalsMs, { Focus: 4000, Leisure: 3000, Neutral: 2000 })
+  assert.deepEqual(result.state.rules, [], 'classification must not manufacture saved overrides')
+  assert.deepEqual(report(await tracker.run()).totalsMs, result.totalsMs, 'repeated reports cannot duplicate elapsed time')
+})
+
+test('overriding and removing an automatic category only changes future active time', async () => {
+  const h = harness(), tracker = h.tracker()
+  h.set({ url: 'https://developer.mozilla.org/en-US/docs/Web' })
+  report(await tracker.run({ kind: 'enable' }))
+  h.advance(9000)
+  const overridden = report(await tracker.run({ kind: 'rule-save', hostname: 'developer.mozilla.org', category: 'Neutral' }))
+  assert.deepEqual(overridden.totalsMs, { Focus: 9000, Leisure: 0, Neutral: 0 })
+  assert.equal(overridden.category, 'Neutral')
+  assert.equal(overridden.classificationOrigin, 'Your override')
+  const focus = structuredClone(overridden.state.summaries[0])
+  h.advance(4000)
+  const removed = report(await tracker.run({ kind: 'rule-remove', hostname: 'developer.mozilla.org' }))
+  assert.equal(removed.category, 'Focus')
+  assert.equal(removed.classificationOrigin, 'Automatic')
+  assert.deepEqual(removed.totalsMs, { Focus: 9000, Leisure: 0, Neutral: 4000 })
+  assert.deepEqual(removed.state.summaries.find((entry) => entry.eventId === focus.eventId), focus,
+    'a rule change must not rewrite existing time or its revision')
+  h.advance(2000)
+  const result = report(await tracker.run())
+  assert.deepEqual(result.totalsMs, { Focus: 11_000, Leisure: 0, Neutral: 4000 })
+  assert.equal(result.state.summaries.find((entry) => entry.category === 'Focus')?.eventId, focus.eventId)
+  assert.deepEqual(report(await tracker.run()).totalsMs, result.totalsMs)
+})
+
+test('v1 and v2 saved category rules remain overrides without reclassifying recorded totals', async () => {
+  for (const version of [1, 2]) {
+    const h = harness()
+    const legacySummary = { schemaVersion: 1, eventId: 'already-recorded-focus', source: 'extension', category: 'Focus',
+      startedAtIso: new Date(h.clock.now() - 5000).toISOString(), endedAtIso: new Date(h.clock.now()).toISOString(),
+      activeDurationMs: 5000, timeZone: h.clock.timeZone(), localDate: localDay(h.clock.now()), finalized: false }
+    const summary = version === 1 ? legacySummary : { ...legacySummary, revision: 3, epochId: null }
+    const rules = [{ hostname: 'developer.mozilla.org', category: 'Leisure' }]
+    h.corrupt({ version, enabled: true, paused: false, rules, summaries: [summary], checkpointAt: h.clock.now(),
+      ...(version === 2 ? { pairing: null, pendingPairing: null } : {}) })
+    h.set({ url: 'https://developer.mozilla.org/en-US/' })
+    const tracker = h.tracker(), restored = report(await tracker.run())
+    assert.equal(restored.category, 'Leisure', `v${version} saved choice must beat automatic Focus`)
+    assert.equal(restored.classificationOrigin, 'Your override')
+    assert.deepEqual(restored.state.rules, rules)
+    assert.deepEqual(restored.totalsMs, { Focus: 5000, Leisure: 0, Neutral: 0 })
+    assert.equal(restored.state.summaries[0].eventId, legacySummary.eventId)
+    assert.equal(restored.state.summaries[0].category, 'Focus')
+    assert.equal(restored.state.summaries[0].revision, version === 1 ? 1 : 3)
+    h.advance(2000)
+    const after = report(await tracker.run())
+    assert.deepEqual(after.totalsMs, { Focus: 5000, Leisure: 2000, Neutral: 0 })
+    assert.deepEqual(after.state.summaries[0], restored.state.summaries[0])
+  }
+})
+
 test('tab switches and category navigation do not overlap and retain sub-minute time', async () => {
   const h = harness(), tracker = await configured(h)
   h.advance(10_125); h.set({ url: 'https://play.example/watch?secret=x' })
