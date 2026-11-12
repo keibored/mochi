@@ -145,7 +145,7 @@ function App() {
               <p className="welcome-label">BROWSER ACTIVITY</p>
               <h2 id="tracking-heading">Browser tracking isn’t connected yet.</h2>
               <p>Once connected, Mochi will summarize time on your active websites using your categories.</p>
-              <p className="help-text">The companion Chrome extension is not available yet. Current totals contain only activities you have saved.</p>
+              <p className="help-text">The local Chrome extension proof of concept is not connected to this dashboard. Current totals contain only activities you have saved.</p>
             </section>
             {pet.timer && !toolsOpen && <ActiveTimerNotice session={pet.timer} openTools={() => {
               if (recordingTools.current) {

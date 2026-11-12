@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mochi activity</title></head>
+<body class="popup"><main>
+  <header>mochi ♡ <span>local browser companion</span></header>
+  <div class="mascot" role="img" aria-label="Mochi the bunny">🐰</div>
+  <h1 id="status" role="status" aria-live="polite">Checking activity…</h1>
+  <p id="current">No recorded activity has been loaded yet.</p>
+  <div id="controls" class="actions"></div>
+  <p id="error" class="error" role="alert"></p>
+  <section class="card" aria-labelledby="today"><h2 id="today">Today’s local activity</h2><dl id="totals"></dl><p id="empty" class="hint"></p></section>
+  <button id="settings" type="button" class="secondary">Website categories</button>
+  <p class="hint">Opt-in estimates, with a 60-second idle threshold. Uncertain restart/sleep gaps are discarded. No dashboard sync or pet rewards yet.</p>
+  <p id="checked" class="hint"></p>
+</main><script type="module" src="/src/popup.ts"></script></body></html>

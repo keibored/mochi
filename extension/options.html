@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mochi website categories</title></head>
+<body><main class="options">
+  <header>mochi ♡ <span>extension settings</span></header>
+  <h1>Website categories</h1>
+  <p>Choose what each website means for your day. Unknown hostnames are Neutral. Rest is intentional and is never inferred from idle time.</p>
+  <p class="hint">These rules belong only to this extension. They are not synchronized with the Mochi web app. Exact hostnames only: example.com does not include www.example.com. Changes apply to future time only.</p>
+  <form id="rule-form" class="card" novalidate>
+    <label for="hostname">Hostname or HTTP(S) URL</label>
+    <input id="hostname" type="text" maxlength="4096" autocapitalize="none" spellcheck="false" aria-describedby="host-help error">
+    <p id="host-help" class="hint">Only the hostname is saved. Paths, queries, fragments and URL ports are discarded; login details and unsupported protocols are rejected.</p>
+    <label for="category">Category</label><select id="category"><option>Neutral</option><option>Focus</option><option>Leisure</option></select>
+    <div class="actions"><button id="save-rule" type="submit">Save rule ♡</button><button id="cancel-edit" class="secondary" type="button" hidden>Cancel edit</button></div>
+    <p id="error" class="error" role="alert"></p>
+  </form>
+  <p id="feedback" role="status" aria-live="polite"></p>
+  <ul id="rules" class="rules"></ul>
+  <p class="hint">No browsing history is stored. Local category aggregates are retained for up to seven days, with a maximum of 64 summaries and 200 explicit rules. No backend, accounts, analytics or network sync.</p>
+</main><script type="module" src="/src/options.ts"></script></body></html>

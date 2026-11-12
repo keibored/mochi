@@ -2,7 +2,7 @@
 
 Mochi is a kawaii productivity companion: a little focus, a little rest, and a bunny by your side.
 
-Mochi’s primary experience will be a pet that reacts to automatically tracked browser activity from a companion Chrome extension. Manual logging and the focus timer are optional tools. The main React + TypeScript web application is being prepared first, using Vite; automatic detection does not work yet. The Chrome extension and backend are not implemented.
+Mochi’s primary experience will be a pet that reacts to automatically tracked browser activity from a companion Chrome extension. Manual logging and the focus timer are optional tools. The React + TypeScript web app uses Vite. A standalone, opt-in Chrome extension proof of concept now implements local browser activity estimates and a popup report; it is **not connected to the web dashboard or pet rewards**. The backend is not implemented. Real Chrome integration still needs unpacked-browser verification.
 
 ## Working now
 
@@ -18,6 +18,7 @@ Mochi’s primary experience will be a pet that reacts to automatically tracked 
 - A configurable daily focus goal, defaulting to 60 minutes, with a valid range of 15–480 whole minutes. Goal progress is separate from lifetime XP and the reward cap; changing the goal never awards rewards.
 - Gentle activity reactions, inline validation, accessible feedback, and keyboard focus indicators.
 - Local persistence with validation and migration of older focus-only entries.
+- A separate Manifest V3 extension implementation with explicit enable/pause/resume controls, focused-active-tab/idle gating, local category totals, and its own category settings. Its rules and storage are independent of the web app. See [extension setup and limitations](extension/README.md).
 
 Timer and manual logging live in the keyboard-accessible **Other ways to record time** disclosure. An active timer’s running, paused, or completed status remains visible when it is collapsed; **Open timer controls** reveals the controls. Rest stays intentional and is never inferred from browser inactivity.
 
@@ -31,11 +32,31 @@ Planned flow: **Extension → validated activity ingestion → existing reward l
 
 ## Not implemented yet
 
-There is no Chrome extension, automatic browser detection, connection handshake, activity receiver, backend, authentication, or device sync. Website rules are saved locally for future tracking only. Saved activities, localStorage, and rule settings never imply a connected state. Future connected/tracking/paused status must come from the actual integration. Mochi does not read page contents, titles, full URLs, or browsing history.
+There is no extension-to-dashboard connection, reward ingestion, connection handshake, backend, authentication, analytics, or device sync. The local extension estimates activity only after explicit enablement; the web dashboard still does not automatically detect browser activity. Web-app website rules are saved for a future integration and are not synchronized with extension rules. Saved activities, localStorage, and rule settings never imply a connected dashboard. No page contents, titles, full URLs, queries, fragments, or site-visit history are persisted by the extension; only category/day aggregates and user-authored rules are stored.
 
 ## Branch dependency for this increment
 
 `feature/tracking-dashboard` starts from timer commit `233bb7d` and depends on the still-unmerged [focus timer PR #1](https://github.com/keibored/mochi/pull/1). Its PR targets `feature/focus-timer` to show only this increment, preserving timer changes without duplicating their diff. Neither PR is merged automatically. After PR #1 is merged, retarget this PR to `main` and reconcile the base before merging.
+
+The current `feature/browser-tracking` increment starts from tracking-dashboard commit `ae440d7` and targets `feature/tracking-dashboard` while [PR #2](https://github.com/keibored/mochi/pull/2) remains unmerged. It therefore depends on both earlier PRs. No prior PRs are merged or force-pushed. Retarget/reconcile this PR against `main` after its parents merge.
+
+## Local Chrome extension setup
+
+From this repository root:
+
+```sh
+npm ci
+npm run test:extension
+npm run build:extension
+```
+
+Use `npm.cmd` in PowerShell if needed. Open **chrome://extensions**, enable **Developer mode**, choose **Load unpacked**, and select **`C:\Users\keish\OneDrive\Documents\mochi\extension\dist`**. Chrome 120+ is required. Pin/open Mochi and click **Enable tracking**; loading alone never enables it. Use **Website categories** to set exact-hostname Focus/Leisure/Neutral rules separately from the web app. Reload the extension after rebuilding.
+
+For a short manual check, assign `example.com` to Focus and `example.org` to Leisure, actively browse each for about 20 seconds, and inspect the popup. Switch to another application, Pause/Resume, and leave the machine idle for over 60 seconds: unfocused/paused/idle time after the threshold should stop accumulating. Close/reopen Chrome and confirm saved totals/preferences remain while closed time is not credited. The web app's XP and food credits must not change. These are explicit test categories, not built-in defaults.
+
+Permissions are limited to `tabs` (transient active URL metadata), `idle` (60-second active/idle/locked detection), `storage` (extension-local data), and `alarms` (30-second checkpoint requests). There are no host permissions or content scripts. Worker restarts discard unconfirmed tails; long gaps and significant clock discontinuities are dropped. This can undercount quiet-site time and delayed alarms. Short event/clock/idle-threshold uncertainty remains; estimates do not verify work or precisely identify every short sleep. Data is bounded to rolling seven-day aggregates, at most 64 summaries and 200 explicit rules. See the [full accounting, privacy, permission sources, and manual test guide](extension/README.md).
+
+The existing web commands below are unchanged. Full verification uses `npm test`, `npm run test:extension`, `npm run lint`, `npm run build`, `npm run build:extension`, and `git diff --check`.
 
 ## Local development
 
@@ -111,7 +132,7 @@ The existing GitHub remote is `origin`: <https://github.com/keibored/mochi>. Git
 - Create a feature branch for each next increment.
 - Make focused commits, run tests, lint, and build, and review the diff before committing.
 - Push the feature branch and merge through a pull request when GitHub is connected. Keep `main` passing checks.
-- Complete the main web app before starting the Chrome extension. Backend work is also a later phase.
+- Continue the main web experience and companion integration in focused increments. The current extension is a standalone local proof of concept; backend and dashboard reward ingestion remain later work.
 - Never commit secrets, `node_modules/`, build output, or logs. Never force-push or discard others' changes to resolve divergence.
 
 Once the baseline is pushed, start a new increment from a clean working tree:

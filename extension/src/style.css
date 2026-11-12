@@ -1,0 +1,30 @@
+:root { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #784456; background: #f9e1e8; color-scheme: light; line-height: 1.6; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.popup { width: 360px; }
+main { padding: 24px; }
+.options { max-width: 680px; margin: 32px auto; }
+header { font-size: 1.3rem; font-weight: 750; }
+header span { display: block; font-size: .75rem; color: #89616e; font-weight: 400; }
+.mascot { margin: 16px auto 0; text-align: center; font-size: 3rem; }
+h1 { font-size: 1.5rem; line-height: 1.3; }
+h2 { font-size: 1rem; margin-top: 0; }
+.popup h1, .popup #current { text-align: center; }
+.card { margin: 20px 0; padding: 20px; border: 1px solid #edcbd4; border-radius: 22px; background: #fffdf8; box-shadow: 0 8px 24px #a9547110; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+button { min-height: 44px; padding: 10px 16px; border: 1px solid #d99caf; border-radius: 999px; background: #f4c5d2; color: #71394c; font: inherit; font-weight: 650; cursor: pointer; }
+button:hover:enabled { background: #efb3c4; }
+button:disabled { background: #f6e3e9; color: #88616e; cursor: default; }
+button.secondary { background: #fff6f8; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #97526b; outline-offset: 3px; }
+input, select { width: 100%; min-height: 44px; padding: 10px; color: #71394c; background: #fff; border: 1px solid #c994a5; border-radius: 12px; font: inherit; }
+label { display: block; font-weight: 650; margin: 16px 0 8px; }
+.hint { font-size: .8125rem; color: #89616e; }
+.error { color: #9b344d; font-size: .875rem; }
+dl { margin: 0; }
+dl div { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0; }
+dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rules { list-style: none; padding: 0; }
+.rules li { padding: 16px; margin-bottom: 12px; border: 1px solid #edcbd4; border-radius: 18px; background: #fffdf8; overflow-wrap: anywhere; }
+[hidden] { display: none !important; }
+@media (max-width: 400px) { .options { margin: 0; } main { padding: 20px; } }
