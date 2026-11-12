@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { FocusTimer } from './FocusTimer'
+import { ActiveTimerNotice } from './ActiveTimerNotice'
+import { WebsiteRulesSettings } from './WebsiteRulesSettings'
 import { useProgress } from './useProgress'
 import { ACTIVITY_CATEGORIES, dailySummary, FEED_COST, FIRST_MILESTONE_XP, isActivityCategory, isValidDuration, isValidGoal, localDateKey, MAX_NOTE_LENGTH, MIN_FOCUS_GOAL, MAX_FOCUS_GOAL } from './rewards'
 import type { ActivityCategory } from './rewards'
@@ -8,6 +10,8 @@ import './App.css'
 
 function App() {
   const { pet, dispatch, storageNotice, canPersist, busy } = useProgress()
+  const recordingTools = useRef<HTMLDetailsElement>(null)
+  const [toolsOpen, setToolsOpen] = useState(false)
   const [duration, setDuration] = useState('')
   const [category, setCategory] = useState<ActivityCategory>('Focus')
   const [note, setNote] = useState('')
@@ -137,7 +141,18 @@ function App() {
             <p className="feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
           </section>
           <div className="focus-column">
-            <FocusTimer session={pet.timer} dispatch={dispatch} canPersist={canPersist} busy={busy} />
+            <section className="panel tracking-status" aria-labelledby="tracking-heading">
+              <p className="welcome-label">BROWSER ACTIVITY</p>
+              <h2 id="tracking-heading">Browser tracking isn’t connected yet.</h2>
+              <p>Once connected, Mochi will summarize time on your active websites using your categories.</p>
+              <p className="help-text">The companion Chrome extension is not available yet. Current totals contain only activities you have saved.</p>
+            </section>
+            {pet.timer && !toolsOpen && <ActiveTimerNotice session={pet.timer} openTools={() => {
+              if (recordingTools.current) {
+                recordingTools.current.open = true
+                recordingTools.current.querySelector('summary')?.focus()
+              }
+            }} />}
             <section className="panel summary-card" aria-labelledby="summary-heading">
               <h2 id="summary-heading">Today’s activity</h2>
               <p className="help-text">Saved activity minutes · your local calendar day</p>
@@ -147,33 +162,6 @@ function App() {
               <label className="milestone-label" htmlFor="goal-progress">{todayMinutes} / {pet.dailyFocusGoal} focus minutes</label>
               <progress id="goal-progress" max={pet.dailyFocusGoal} value={Math.min(todayMinutes, pet.dailyFocusGoal)} />
               {todayMinutes >= pet.dailyFocusGoal && <p className="goal-complete">Your focus goal is complete. Make room for a little rest ♡</p>}
-            </section>
-            <section className="panel focus-card" aria-labelledby="focus-heading">
-              <p className="welcome-label">YOUR LITTLE STEPS</p>
-              <h2 id="focus-heading">Log an activity</h2>
-              <p>Add time you have already spent. Entries are manually logged time; Mochi does not track your activity.</p>
-              <form onSubmit={logActivity} noValidate>
-                <label htmlFor="activity-category">Category</label>
-                <select id="activity-category" value={category} onChange={(event) => {
-                  if (isActivityCategory(event.target.value)) setCategory(event.target.value)
-                }}>
-                  {ACTIVITY_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
-                <label htmlFor="focus-duration">Duration (minutes)</label>
-                <input id="focus-duration" type="number" inputMode="numeric" min="1" max="240" step="1" value={duration}
-                  onChange={(event) => { setDuration(event.target.value); setError('') }}
-                  aria-invalid={Boolean(error)} aria-describedby={`duration-help${error ? ' duration-error' : ''}`} />
-                <p id="duration-help" className="help-text">Whole minutes, from 1 to 240 per entry.</p>
-                {error && <p id="duration-error" className="field-error" role="alert">{error}</p>}
-                <label htmlFor="activity-note">Note (optional)</label>
-                <textarea id="activity-note" rows={3} maxLength={MAX_NOTE_LENGTH} value={note}
-                  onChange={(event) => { setNote(event.target.value); setNoteError('') }}
-                  aria-invalid={Boolean(noteError)} aria-describedby={`note-help${noteError ? ' note-error' : ''}`} />
-                <p id="note-help" className="help-text">{note.length} / {MAX_NOTE_LENGTH} characters</p>
-                {noteError && <p id="note-error" className="field-error" role="alert">{noteError}</p>}
-                <button className="adopt-button" type="submit" disabled={busy}>Save activity ♡</button>
-              </form>
-              <p className="reward-note">Only Focus earns rewards: every 15 minutes in a local calendar day earns 5 XP + 2 food credits. Partial focus minutes add up across entries. Rewards cover the first 240 focus minutes each day; all logged time still counts. Leisure, Rest, and Neutral never subtract XP or credits.</p>
             </section>
             <section className="panel activity-card" aria-labelledby="activity-heading">
               <h2 id="activity-heading">Recent activities</h2>
@@ -188,6 +176,40 @@ function App() {
                 </ul>
               )}
             </section>
+            <details id="recording-tools" className="recording-tools" ref={recordingTools} onToggle={(event) => setToolsOpen(event.currentTarget.open)}>
+              <summary>Other ways to record time<span>Optional focus timer and manual logging</span></summary>
+              <div className="optional-tools-content">
+                <FocusTimer session={pet.timer} dispatch={dispatch} canPersist={canPersist} busy={busy} />
+                <section className="panel focus-card" aria-labelledby="focus-heading">
+                  <p className="welcome-label">YOUR LITTLE STEPS</p>
+                  <h2 id="focus-heading">Log an activity</h2>
+                  <p>Add time you have already spent. Entries are manually logged time; Mochi does not track your activity.</p>
+                  <form onSubmit={logActivity} noValidate>
+                    <label htmlFor="activity-category">Category</label>
+                    <select id="activity-category" value={category} onChange={(event) => {
+                      if (isActivityCategory(event.target.value)) setCategory(event.target.value)
+                    }}>
+                      {ACTIVITY_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                    <label htmlFor="focus-duration">Duration (minutes)</label>
+                    <input id="focus-duration" type="number" inputMode="numeric" min="1" max="240" step="1" value={duration}
+                      onChange={(event) => { setDuration(event.target.value); setError('') }}
+                      aria-invalid={Boolean(error)} aria-describedby={`duration-help${error ? ' duration-error' : ''}`} />
+                    <p id="duration-help" className="help-text">Whole minutes, from 1 to 240 per entry.</p>
+                    {error && <p id="duration-error" className="field-error" role="alert">{error}</p>}
+                    <label htmlFor="activity-note">Note (optional)</label>
+                    <textarea id="activity-note" rows={3} maxLength={MAX_NOTE_LENGTH} value={note}
+                      onChange={(event) => { setNote(event.target.value); setNoteError('') }}
+                      aria-invalid={Boolean(noteError)} aria-describedby={`note-help${noteError ? ' note-error' : ''}`} />
+                    <p id="note-help" className="help-text">{note.length} / {MAX_NOTE_LENGTH} characters</p>
+                    {noteError && <p id="note-error" className="field-error" role="alert">{noteError}</p>}
+                    <button className="adopt-button" type="submit" disabled={busy}>Save activity ♡</button>
+                  </form>
+                  <p className="reward-note">Only Focus earns rewards: every 15 minutes in a local calendar day earns 5 XP + 2 food credits. Partial focus minutes add up across entries. Rewards cover the first 240 focus minutes each day; all logged time still counts. Leisure, Rest, and Neutral never subtract XP or credits.</p>
+                </section>
+              </div>
+            </details>
+            <WebsiteRulesSettings rules={pet.websiteRules} dispatch={dispatch} busy={busy} canPersist={canPersist} />
             <section className="panel settings-card" aria-labelledby="settings-heading">
               <h2 id="settings-heading">A goal for your day</h2>
               <p className="help-text" id="goal-help">A personal focus target, separate from lifetime XP. Changing it never awards rewards. The reward cap stays at 240 focus minutes per day.</p>
