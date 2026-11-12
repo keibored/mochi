@@ -2,9 +2,11 @@ import { DEFAULT_FOCUS_GOAL, FEED_COST, isActivity, isValidGoal, rewardsForEntry
 import type { Activity } from './rewards.ts'
 import { completionTime, isTimerDuration, pauseTimer, resumeTimer } from './timer.ts'
 import type { TimerSession } from './timer.ts'
+import { changeWebsiteRule } from './websiteRules.ts'
+import type { WebsiteCategory, WebsiteRule } from './websiteRules.ts'
 
 export interface PetState {
-  version: 3
+  version: 4
   adopted: boolean
   name: string
   xp: number
@@ -12,10 +14,11 @@ export interface PetState {
   activities: Activity[]
   dailyFocusGoal: number
   timer: TimerSession | null
+  websiteRules: WebsiteRule[]
 }
 
 export function freshPet(): PetState {
-  return { version: 3, adopted: false, name: 'Mochi', xp: 0, foodCredits: 0, activities: [], dailyFocusGoal: DEFAULT_FOCUS_GOAL, timer: null }
+  return { version: 4, adopted: false, name: 'Mochi', xp: 0, foodCredits: 0, activities: [], dailyFocusGoal: DEFAULT_FOCUS_GOAL, timer: null, websiteRules: [] }
 }
 
 export type PetAction =
@@ -23,12 +26,22 @@ export type PetAction =
   | { type: 'log'; activity: Activity }
   | { type: 'feed' }
   | { type: 'goal'; minutes: number }
+  | { type: 'rule-save'; hostname: string; category: WebsiteCategory; originalHostname?: string }
+  | { type: 'rule-remove'; hostname: string }
   | { type: 'timer-start'; id: string; duration: number; now: number }
   | { type: 'timer-pause' | 'timer-resume' | 'timer-save' | 'timer-cancel'; id: string; now: number }
 
 export function petReducer(state: PetState, action: PetAction): PetState {
   if (action.type === 'adopt') return { ...state, adopted: true }
   if (!state.adopted) return state
+  if (action.type === 'rule-save') {
+    const result = changeWebsiteRule(state.websiteRules, action.hostname, action.category, action.originalHostname)
+    return result.error ? state : { ...state, websiteRules: [...result.rules] }
+  }
+  if (action.type === 'rule-remove') {
+    const websiteRules = state.websiteRules.filter((rule) => rule.hostname !== action.hostname)
+    return websiteRules.length === state.websiteRules.length ? state : { ...state, websiteRules }
+  }
   if (action.type === 'timer-start') {
     if (state.timer || !isTimerDuration(action.duration) || !action.id.startsWith('timer-') ||
         action.id.length <= 6 || !Number.isSafeInteger(action.now) || action.now < 0 ||

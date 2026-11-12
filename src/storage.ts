@@ -2,6 +2,7 @@
 import type { PetAction, PetState } from './petState.ts'
 import { DEFAULT_FOCUS_GOAL, isActivity, isValidGoal } from './rewards.ts'
 import { isTimerSession } from './timer.ts'
+import { areWebsiteRules } from './websiteRules.ts'
 
 export const STORAGE_KEY = 'mochi.progress'
 
@@ -10,11 +11,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isPetState(value: unknown): value is PetState {
-  if (!isRecord(value) || value.version !== 3 || typeof value.adopted !== 'boolean' ||
+  if (!isRecord(value) || value.version !== 4 || typeof value.adopted !== 'boolean' ||
       value.name !== 'Mochi' || typeof value.xp !== 'number' || !Number.isSafeInteger(value.xp) || value.xp < 0 ||
       typeof value.foodCredits !== 'number' || !Number.isSafeInteger(value.foodCredits) || value.foodCredits < 0 ||
       typeof value.dailyFocusGoal !== 'number' || !isValidGoal(value.dailyFocusGoal) ||
-      !Array.isArray(value.activities) || (value.timer !== null && !isTimerSession(value.timer))) return false
+      !Array.isArray(value.activities) || !areWebsiteRules(value.websiteRules) ||
+      (value.timer !== null && !isTimerSession(value.timer))) return false
   const ids = new Set<string>()
   const validActivities = value.activities.every((activity: unknown) => {
     if (!isActivity(activity) || ids.has(activity.id)) return false
@@ -26,21 +28,22 @@ export function isPetState(value: unknown): value is PetState {
 
 // Structural migration only: saved balances remain authoritative.
 export function migratePet(value: unknown): PetState | null {
-  if (!isRecord(value) || (value.version !== 1 && value.version !== 2 && value.version !== 3)) return null
+  if (!isRecord(value) || (value.version !== 1 && value.version !== 2 && value.version !== 3 && value.version !== 4)) return null
   let activities = value.activities
   if (value.version === 1) {
     if (!Array.isArray(activities)) return null
     activities = activities.map((entry: unknown) => isRecord(entry)
       ? { ...entry, category: 'Focus', note: '' } : entry)
   }
-  if (value.version !== 3) {
+  if (value.version === 1 || value.version === 2) {
     if (!Array.isArray(activities)) return null
     activities = activities.map((entry: unknown) => isRecord(entry) ? { ...entry, source: 'Manual' } : entry)
   }
   const candidate = {
     ...value,
-    version: 3,
-    timer: value.version === 3 ? value.timer : null,
+    version: 4,
+    timer: value.version === 3 || value.version === 4 ? value.timer : null,
+    websiteRules: value.version === 4 ? value.websiteRules : [],
     dailyFocusGoal: value.dailyFocusGoal === undefined ? DEFAULT_FOCUS_GOAL : value.dailyFocusGoal,
     activities,
   }
