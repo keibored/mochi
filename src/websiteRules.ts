@@ -1,5 +1,14 @@
+import { WEBSITE_CATALOG } from './websiteCatalog.ts'
+
 export const WEBSITE_CATEGORIES = ['Focus', 'Leisure', 'Neutral'] as const
 export type WebsiteCategory = typeof WEBSITE_CATEGORIES[number]
+export type ClassificationOrigin = 'Automatic' | 'Your override' | 'Unclassified'
+
+export interface WebsiteClassification {
+  category: WebsiteCategory
+  origin: ClassificationOrigin
+  matchedHostname?: string
+}
 
 export interface WebsiteRule {
   hostname: string
@@ -64,10 +73,25 @@ export function changeWebsiteRule(rules: readonly WebsiteRule[], input: string, 
   return { rules: [...updated, { hostname, category }], error: '' }
 }
 
-/** No suffix/parent-domain matches: subdomains need their own explicit rule. */
-export function categoryForHostname(rules: readonly WebsiteRule[], input: string): WebsiteCategory {
+/** Exact user override > most-specific configured automatic match > Neutral.
+ * Only catalog entries marked includeSubdomains match descendants. Paths and
+ * queries never participate, and suffix checks require a hostname boundary.
+ */
+export function classificationForHostname(rules: readonly WebsiteRule[], input: string): WebsiteClassification {
   try {
     const hostname = normalizeHostname(input)
-    return rules.find((rule) => rule.hostname === hostname)?.category ?? 'Neutral'
-  } catch { return 'Neutral' }
+    const override = rules.find((rule) => rule.hostname === hostname)
+    if (override) return { category: override.category, origin: 'Your override', matchedHostname: hostname }
+    let matched: typeof WEBSITE_CATALOG[number] | undefined
+    for (const entry of WEBSITE_CATALOG) {
+      const matches = hostname === entry.hostname || (entry.includeSubdomains && hostname.endsWith(`.${entry.hostname}`))
+      if (matches && (!matched || entry.hostname.length > matched.hostname.length)) matched = entry
+    }
+    if (matched) return { category: matched.category, origin: 'Automatic', matchedHostname: matched.hostname }
+  } catch { /* Invalid or unsupported input cannot earn an automatic category. */ }
+  return { category: 'Neutral', origin: 'Unclassified' }
+}
+
+export function categoryForHostname(rules: readonly WebsiteRule[], input: string): WebsiteCategory {
+  return classificationForHostname(rules, input).category
 }

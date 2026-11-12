@@ -26,7 +26,9 @@ C:\Users\keish\OneDrive\Documents\mochi\extension\dist
 
 For an initial installation only, choose **Load unpacked** and select the folder above, containing the generated `manifest.json`. The implementation requires a Chromium version supporting the extension's Chrome 120+ APIs. Pin/open Mochi through Brave's Extensions menu. Loading alone does not enable tracking.
 
-**Website categories** opens the extension's own settings. Add exact-hostname Focus, Leisure, or Neutral rules there. Unknown websites are Neutral; subdomains need explicit rules. No site intent is assumed. Existing web rules are preserved but are not copied into the extension.
+Classification works without adding rules: the shared bundled catalog supplies conservative website defaults. The popup shows the current category and **Automatic**, **Your override**, or **Unclassified**. Unknown and mixed-purpose sites remain Neutral; they still accumulate time. Categories estimate a website's usual purpose rather than proving intent.
+
+**Adjust website categories** opens optional extension overrides. An exact-hostname override wins over automatic classification, including an explicit Neutral override. Removing it restores the most specific bundled default or Unclassified Neutral. Existing saved rules remain overrides; web-app overrides are preserved separately and are not copied into the extension. See [catalog rationale, matching rules, and maintenance](../docs/website-classification.md). Version **0.3.0** changes classification, not the storage schema or sync protocol.
 
 Normal dashboard refresh automatically reuses the saved token. If reconnection is needed, use the exact origin and the same installation's ID, then approve again. Same-epoch reapproval rotates the token without resetting its cutoff or buffer. There is no need to clear browser data.
 
@@ -95,10 +97,10 @@ Retention is a rolling **seven days based on aggregate end time**, at most **64 
 ## Manual Brave checks
 
 1. Rebuild/reload/approve using the steps above. If paused/off, confirm connection does not change that preference, then explicitly resume/enable.
-2. Assign `example.com` to Focus and `example.org` to Leisure in extension settings. Browse each actively about 30 seconds, then open the popup and return to the dashboard. Both categories should increase approximately; new post-activation browser entries should be labeled **Extension**. Earlier popup totals need not equal the dashboard.
+2. With no override for those exact hosts, browse `developer.mozilla.org` and `www.netflix.com` actively about 30 seconds each. The popup should show **Focus · Automatic** and **Leisure · Automatic**. Return to the dashboard; new post-activation browser entries should be labeled **Extension**. Earlier popup totals need not equal the dashboard. An unknown site such as `example.org` still accumulates **Neutral · Unclassified** without setup.
 3. Switch to another application for 20 seconds; that unfocused time should not be added. Pause, wait, Resume, and confirm paused time is excluded. Changing tabs must count only one active tab.
 4. Leave input idle over 60 seconds; the grace period may count, but later idle time should not. Generate input to resume. No automatic Rest should appear.
-5. Change a site rule: old category totals stay unchanged and future time uses the new category. Unknown sites remain Neutral.
+5. In **Adjust website categories**, save `developer.mozilla.org` as Neutral. Old Focus time stays Focus; new time uses **Neutral · Your override**. Remove the override to restore **Focus · Automatic** for future time. Check both popup and synced totals; neither retries nor the category change should replay rewards.
 6. Refresh the app and reopen/reload the extension. Preferences, rules, accepted progress, and pairing should persist; normal app refresh should reconnect without approval. Closing Brave must not credit closed time.
 7. Verify a completed 15-minute Focus block earns 5 XP/2 credits once, subject to baseline/cap. Refresh, retry, and use a second app tab: no duplicate reward. Feed once to spend exactly 2 credits. Optional Manual/Timer Focus saves must not add extra rewards after connection.
 
@@ -106,4 +108,4 @@ The user manually confirmed earlier Focus/Leisure/Neutral tracking and paused po
 
 ## Branch dependency
 
-`feature/extension-dashboard-sync` targets `feature/browser-tracking` while [PR #3](https://github.com/keibored/mochi/pull/3) is open and unmerged. PR #3 targets `feature/tracking-dashboard` and depends on [PR #2](https://github.com/keibored/mochi/pull/2), which depends on [timer PR #1](https://github.com/keibored/mochi/pull/1). Leave existing PRs unmerged. Retarget/reconcile dependent bases against `main` after their parents merge.
+`feature/automatic-classification` targets `feature/extension-dashboard-sync` while [PR #4](https://github.com/keibored/mochi/pull/4) is open and unmerged. PR #4 depends on [browser tracking PR #3](https://github.com/keibored/mochi/pull/3), [tracking dashboard PR #2](https://github.com/keibored/mochi/pull/2), and [timer PR #1](https://github.com/keibored/mochi/pull/1). Leave existing PRs unmerged. Retarget/reconcile dependent bases against `main` after their parents merge.

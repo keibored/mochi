@@ -1,6 +1,6 @@
 import type { ChromeApi } from './chromeApi.ts'
-import { changeWebsiteRule, isWebsiteCategory } from '../../src/websiteRules.ts'
-import type { WebsiteRule } from '../../src/websiteRules.ts'
+import { changeWebsiteRule, classificationForHostname, isWebsiteCategory } from '../../src/websiteRules.ts'
+import type { ClassificationOrigin, WebsiteCategory, WebsiteRule } from '../../src/websiteRules.ts'
 import { addTime, classify, CLOCK_TOLERANCE_MS, freshState, hostnameFromTab, IDLE_SECONDS, isTrackingState,
   MAX_GAP_MS, MAX_RULES, migrateTrackingState, prune, statusFor, STORAGE_KEY, todayTotals } from './model.ts'
 import type { Observation, TrackingState, TrackingStatus } from './model.ts'
@@ -11,7 +11,7 @@ import { isAllowedWebSender, opaqueId, PAIRING_TTL_MS } from './syncState.ts'
 import type { ExternalSender } from './syncState.ts'
 
 export interface Clock { now(): number; monotonic(): number; id(): string; timeZone(): string }
-export interface Report { state: TrackingState; status: TrackingStatus; hostname: string | null; category: string; totalsMs: ReturnType<typeof todayTotals>; checkedAt: number }
+export interface Report { state: TrackingState; status: TrackingStatus; hostname: string | null; category: WebsiteCategory; classificationOrigin: ClassificationOrigin; totalsMs: ReturnType<typeof todayTotals>; checkedAt: number }
 export type Response = { ok: true; report: Report; syncReply?: SyncReply } | { ok: false; error: string }
 type Command = { kind: 'report' | 'enable' | 'pause' | 'resume' | 'disable' }
   | { kind: 'rule-save'; hostname: string; category: 'Focus' | 'Leisure' | 'Neutral'; originalHostname?: string }
@@ -192,7 +192,8 @@ export class TrackerController {
             })) }
         }
         return { ok: true, syncReply, report: { state, status: statusFor(state, nextObservation), hostname: nextObservation.hostname,
-          category: nextObservation.category, totalsMs: todayTotals(state, at), checkedAt: at } }
+          category: nextObservation.category, classificationOrigin: classificationForHostname(state.rules, nextObservation.hostname ?? '').origin,
+          totalsMs: todayTotals(state, at), checkedAt: at } }
       } catch (error) {
         this.last = null // Never replay an uncommitted tail after a failed write.
         return { ok: false, error: error instanceof Error ? error.message : 'Chrome storage or activity APIs are unavailable.' }
