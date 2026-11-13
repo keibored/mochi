@@ -57,10 +57,10 @@ export function WebsiteRulesSettings({ rules, dispatch, busy, canPersist }: Prop
     <section className="panel website-settings" aria-labelledby="website-settings-heading">
       <div className="section-heading"><h2 id="website-settings-heading">Website categories</h2></div>
       <p>Mochi sorts supported websites automatically. Adjust a category whenever you need.</p>
-      <p className="help-text">For live tracking, use <strong>Adjust website categories</strong> in Mochi’s Brave popup. Unknown and mixed-purpose sites stay Neutral; categories estimate website purpose, not your intent.</p>
+      <p className="help-text">For browser tracking, use <strong>Adjust website categories</strong> in Mochi’s Brave popup.</p>
       <details className="website-overrides">
-        <summary>Saved dashboard overrides <span>({rules.length})</span></summary>
-        <p className="help-text" id="website-rules-help">This separate dashboard list is preserved for you. Changes here do not update the extension’s live rules or past activities. Removing an override restores its automatic category or Neutral fallback in this list.</p>
+        <summary>Dashboard overrides <span>({rules.length})</span></summary>
+        <p className="help-text" id="website-rules-help">This saved list is separate from the extension’s rules and does not change live tracking. Past activities stay unchanged. Remove an override to restore its automatic category or Neutral fallback here.</p>
         <form onSubmit={save} noValidate>
           <div className="form-row">
             <div className="field">
@@ -78,7 +78,7 @@ export function WebsiteRulesSettings({ rules, dispatch, busy, canPersist }: Prop
               </select>
             </div>
           </div>
-          <p className="help-text" id="hostname-help">Exact hostnames only; subdomains need their own override. Only the hostname is saved, with paths and queries discarded.</p>
+          <p className="help-text" id="hostname-help">Exact hostnames only; subdomains need their own override. Paths and queries are discarded.</p>
           <p className="help-text" id="website-classification-preview">{preview}</p>
           {error && <p id="hostname-error" className="field-error" role="alert">{error}</p>}
           <div className="rule-actions">
@@ -88,7 +88,7 @@ export function WebsiteRulesSettings({ rules, dispatch, busy, canPersist }: Prop
         </form>
         <p className="help-text" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
         {!canPersist && <p className="help-text">Saving is unavailable. These changes will not survive a refresh.</p>}
-        {rules.length === 0 ? <p className="empty-state">No dashboard overrides saved. Automatic categories need no setup.</p> : (
+        {rules.length === 0 ? <p className="empty-state">No dashboard overrides saved.</p> : (
           <ul className="website-rule-list">
             {[...rules].sort((a, b) => a.hostname.localeCompare(b.hostname)).map((rule) => (
               <li key={rule.hostname}>

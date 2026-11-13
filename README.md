@@ -6,7 +6,7 @@ The React + TypeScript web app is the main pet dashboard. A companion Manifest V
 
 ## Working now
 
-- A responsive strawberry-pink and cream app with Home, Activity, and Settings navigation, adoption, an original SVG bunny, feeding, lifetime XP, and a first milestone of 100 XP. Cozy, happy, sleepy, and focusing expressions follow real reactions and timer state.
+- A responsive strawberry-glass app with Home, Activity, and Settings navigation, adoption, an original SVG bunny, feeding, lifetime XP, and a first milestone of 100 XP. Cozy, happy, sleepy, and focusing expressions follow real reactions and timer state. Shared plum/raspberry tokens, limited frosted surfaces, and opaque fallbacks keep the presentation consistent.
 - Extension tracking of the active HTTP(S) tab in the focused browser window while the user is active, with Enable, Pause, Resume, idle handling, and a popup showing real local Focus, Leisure, and Neutral totals.
 - An explicitly approved Brave-to-dashboard connection at **`http://localhost:5173`**. The dashboard shows a freshly verified tracking state and last successfully saved sync; saved data alone never means connected.
 - Today's category summary, a separate daily Focus goal, and recent activities labeled **Manual**, **Timer**, or **Extension**. Browser totals retain fractional minutes. Rest stays intentional, never inferred from inactivity.
@@ -23,7 +23,7 @@ Website setup is optional. Classification uses **your exact-hostname override â†
 
 ## Around your Mochi home
 
-- **Home:** Mochi, feeding, XP, real browser status, today's source-labeled minutes, a separate daily goal, and three recent activities. Once tracking is authoritative, Focus/Leisure/Neutral show browser time; intentional manual Rest is shown separately. The goal also retains Focus saved before connection and labels that baseline when present.
+- **Home:** Mochi, feeding, lifetime XP, real browser status, today's source-labeled minutes and daily goal in one overview, and three recent activities. Once tracking is authoritative, Focus/Leisure/Neutral show browser time; intentional manual Rest is shown separately. The goal stays distinct from lifetime XP and retains Focus saved before connection, labeling that baseline when present.
 - **Activity:** full saved history, shown 20 entries at a time, with Manual/Timer/Extension source labels; the focus timer and manual form are optional tools below. Records may overlap, so history is not presented as a combined time total.
 - **Settings:** the daily focus goal, the actual Brave connection form, and optional website settings. Existing dashboard overrides remain accessible in a disclosure; live tracking overrides still belong to the extension.
 
@@ -117,4 +117,4 @@ Backend services, account authentication, remote/device sync, automatic rule syn
 
 `origin` is <https://github.com/keibored/mochi>. `main` is the stable baseline. Use a feature branch per increment, focused commits, relevant tests/lint/builds and `git diff --check`, a reviewed diff, and pull requests. Never force-push, discard others' work, or commit secrets, dependencies, build output, or logs. Visibility and remotes change only at the owner's direction.
 
-`feature/cozy-ui` targets `feature/automatic-classification` while [classification PR #5](https://github.com/keibored/mochi/pull/5) is open and unmerged. The redesign is a separate commit. PR #5 depends on [sync PR #4](https://github.com/keibored/mochi/pull/4), [browser tracking PR #3](https://github.com/keibored/mochi/pull/3), [tracking dashboard PR #2](https://github.com/keibored/mochi/pull/2), and [timer PR #1](https://github.com/keibored/mochi/pull/1). Keep these PRs unmerged for review. Once parents merge, retarget/reconcile dependent branches against `main` without duplicating their changes. Continue the main web experience and companion integration in focused increments; backend work remains a later phase.
+`feature/strawberry-glass` targets `feature/cozy-ui` while [UI PR #6](https://github.com/keibored/mochi/pull/6) is open and unmerged. The refinement is a separate commit. PR #6 depends on [classification PR #5](https://github.com/keibored/mochi/pull/5), [sync PR #4](https://github.com/keibored/mochi/pull/4), [browser tracking PR #3](https://github.com/keibored/mochi/pull/3), [tracking dashboard PR #2](https://github.com/keibored/mochi/pull/2), and [timer PR #1](https://github.com/keibored/mochi/pull/1). Keep these PRs unmerged for review. Once parents merge, retarget/reconcile dependent branches against `main` without duplicating their changes. Continue the main web experience and companion integration in focused increments; backend work remains a later phase.
