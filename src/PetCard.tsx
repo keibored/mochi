@@ -19,9 +19,8 @@ export function PetCard({ pet, reaction, busy, onFeed }: { pet: PetState; reacti
   const canFeed = pet.foodCredits >= FEED_COST
   return (
     <section className="panel pet-card" aria-labelledby="pet-heading">
-      <div className="pet-card-header"><div><p className="eyebrow">Your cozy corner</p><h2 id="pet-heading">{pet.name}</h2></div><span className="mood-pill">{expression === 'focusing' ? 'Focusing together' : expression === 'happy' ? 'Happy bunny' : expression === 'sleepy' ? 'Resting together' : 'Cozy companion'}</span></div>
+      <div className="pet-card-header"><h2 id="pet-heading">{pet.name}</h2><p className="pet-mood">{mood}</p></div>
       <div className="pet-stage"><MochiBunny expression={expression} /></div>
-      <p className="pet-mood">{mood}</p>
       <div className="pet-bottom">
         <dl className="pet-stats"><div><dt>Lifetime XP</dt><dd>{pet.xp} <small>XP</small></dd></div><div><dt>Food credits</dt><dd>{pet.foodCredits} <AppIcon name="carrot" /></dd></div></dl>
         <div className="xp-row"><label htmlFor="xp-progress">First milestone</label><span>{pet.xp} / {FIRST_MILESTONE_XP} XP</span></div>

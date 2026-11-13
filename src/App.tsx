@@ -8,7 +8,7 @@ import { useExtensionSync } from './useExtensionSync'
 import { useProgress } from './useProgress'
 import { ACTIVITY_CATEGORIES, FEED_COST, isActivityCategory, isValidDuration, isValidGoal, localDateKey, MAX_NOTE_LENGTH, MIN_FOCUS_GOAL, MAX_FOCUS_GOAL } from './rewards'
 import type { ActivityCategory } from './rewards'
-import { dashboardSummary, focusBaselineForDate, formatMinutes, recentActivityView } from './integration/activityView'
+import { recentActivityView } from './integration/activityView'
 import { ActivityHistory } from './ActivityHistory'
 import { ActivitySummary } from './ActivitySummary'
 import { PetCard } from './PetCard'
@@ -111,11 +111,8 @@ function App() {
     setFeedback('Yum! Mochi loved that little treat ♡')
   }
 
-  const summary = dashboardSummary(pet.activities, pet.extensionSync, today)
-  const todayMinutes = summary.Focus
   const history = recentActivityView(pet.activities, pet.extensionSync, historyLimit + 1)
   const browserAuthoritative = pet.extensionSync.authorityStartedAt !== null
-  const earlierFocus = focusBaselineForDate(pet.extensionSync, today)
 
   if (!pet.adopted) {
     return (
@@ -135,7 +132,7 @@ function App() {
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to content</a>
       <header className="app-header">
-        <div className="brand"><span className="brand-symbol" aria-hidden="true">♡</span><span className="brand-name">mochi<small className="brand-tagline">A little progress, together.</small></span></div>
+        <div className="brand"><span className="brand-symbol" aria-hidden="true">♡</span><span className="brand-name">mochi</span></div>
         <nav className="main-nav" aria-label="Main navigation">
           {navigation.map((item) => <button key={item.name} type="button" aria-current={view === item.name ? 'page' : undefined} aria-controls={`${item.name.toLowerCase()}-view`} onClick={() => navigate(item.name)}><span className="nav-icon"><AppIcon name={item.icon} /></span>{item.name}</button>)}
         </nav>
@@ -146,34 +143,27 @@ function App() {
         <p className="app-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
         {/* Keep every view mounted so navigation preserves unsaved fields and timer controls. */}
         <section id="home-view" className="app-view" hidden={view !== 'Home'} aria-labelledby="home-heading">
-          <div className="view-heading"><div><p className="eyebrow">Make yourself at home</p><h1 id="home-heading" tabIndex={-1}>A little focus. A little joy.</h1><p>One small step, with {pet.name} by your side.</p></div></div>
+          <div className="view-heading"><h1 id="home-heading" tabIndex={-1}>Your day with {pet.name}</h1></div>
           <div className="home-grid">
             <PetCard pet={pet} reaction={reaction} busy={busy} onFeed={() => void feed()} />
             <div className="home-aside">
               <TrackingCard pet={pet} sync={sync} openSettings={() => navigate('Settings')} />
-              <ActivitySummary pet={pet} today={today} />
-              <section className="panel goal-card" aria-labelledby="goal-heading">
-                <div className="card-heading"><h2 id="goal-heading">Your daily focus goal</h2><span className="goal-symbol"><AppIcon name="focus" /></span></div>
-                <div className="goal-topline"><label htmlFor="goal-progress"><strong>{formatMinutes(todayMinutes)}</strong> / {pet.dailyFocusGoal} focus minutes</label><button className="text-button" type="button" onClick={() => navigate('Settings')}>Adjust</button></div>
-                <progress id="goal-progress" max={pet.dailyFocusGoal} value={Math.min(todayMinutes, pet.dailyFocusGoal)} />
-                <p className={todayMinutes >= pet.dailyFocusGoal ? 'goal-complete' : 'help-text'}>{todayMinutes >= pet.dailyFocusGoal ? 'Your focus goal is complete. Make room for a little rest ♡' : 'A personal target. Every little bit counts.'}</p>
-                {browserAuthoritative && earlierFocus > 0 && <p className="help-text">Includes {formatMinutes(earlierFocus)} Focus minutes saved before tracking was connected.</p>}
-              </section>
+              <ActivitySummary pet={pet} today={today} onAdjustGoal={() => navigate('Settings')} />
             </div>
           </div>
           <section className="panel recent-preview" aria-labelledby="recent-heading"><div className="section-heading"><h2 id="recent-heading">Recent moments</h2><button className="text-button" type="button" onClick={() => navigate('Activity')}>View activity <AppIcon name="arrow" /></button></div><ActivityHistory activities={history.slice(0, 3)} /></section>
         </section>
 
         <section id="activity-view" className="app-view" hidden={view !== 'Activity'} aria-labelledby="activity-heading">
-          <div className="view-heading"><div><p className="eyebrow">Room for every kind of day</p><h1 id="activity-heading" tabIndex={-1}>Your activity</h1><p>Real records, little moments, and optional ways to add time.</p></div></div>
+          <div className="view-heading"><h1 id="activity-heading" tabIndex={-1}>Activity</h1><p>Your recorded time and optional tools.</p></div>
           <section className="panel history-card" aria-labelledby="history-heading"><div className="section-heading"><h2 id="history-heading">Activity history</h2><span className="day-label">Newest first</span></div><p className="help-text history-help">Browser summaries, Manual entries, and Timer sessions keep their source labels. Records can overlap; this list is not a combined time total.</p><ActivityHistory activities={history.slice(0, historyLimit)} />{history.length > historyLimit && <button className="adopt-button secondary-button" type="button" onClick={() => setHistoryLimit((limit) => limit + 20)}>Show more activities</button>}</section>
-          <div className="optional-tools-intro"><h2>Other ways to record time</h2><p>Optional tools for a little structure, or a moment away from the browser.</p></div>
-          {browserAuthoritative && <p className="optional-tools-notice">These entries stay in history without extra Focus rewards or goal progress, including while tracking is paused or disconnected. Browser Focus supplies new rewards. Intentional manual Rest still counts.</p>}
+          <div className="optional-tools-intro"><h2>Other ways to record time</h2></div>
+          {browserAuthoritative && <p className="optional-tools-notice">Manual and timer entries stay in history without extra Focus rewards or goal progress, even while disconnected. Manual Rest still counts.</p>}
           <div className="tools-grid">
             <FocusTimer session={pet.timer} dispatch={dispatch} canPersist={canPersist} busy={busy} />
             <section className="panel focus-card" aria-labelledby="manual-heading">
               <div className="card-heading"><h2 id="manual-heading">Log an activity</h2><span className="source-badge">Manual</span></div>
-              <p className="help-text">Record time you have already spent. This is manual logging.</p>
+              <p className="help-text">Log time you have already spent.</p>
               <form onSubmit={logActivity} noValidate>
                 <div className="form-row"><div><label htmlFor="activity-category">Category</label><select id="activity-category" value={category} onChange={(event) => { if (isActivityCategory(event.target.value)) setCategory(event.target.value) }}>{ACTIVITY_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
                   <div><label htmlFor="focus-duration">Minutes</label><input id="focus-duration" type="number" inputMode="numeric" min="1" max="240" step="1" value={duration} onChange={(event) => { setDuration(event.target.value); setError('') }} aria-invalid={Boolean(error)} aria-describedby={`duration-help${error ? ' duration-error' : ''}`} /></div></div>
@@ -191,7 +181,7 @@ function App() {
         </section>
 
         <section id="settings-view" className="app-view" hidden={view !== 'Settings'} aria-labelledby="settings-heading">
-          <div className="view-heading"><div><p className="eyebrow">A little space for your preferences</p><h1 id="settings-heading" tabIndex={-1}>Make it your own</h1><p>A gentle goal and a browser companion, on your terms.</p></div></div>
+          <div className="view-heading"><h1 id="settings-heading" tabIndex={-1}>Settings</h1><p>Your goal, connection, and website categories.</p></div>
           <div className="settings-grid">
             <section className="panel settings-card" aria-labelledby="daily-goal-heading">
               <div className="card-heading"><h2 id="daily-goal-heading">Daily focus goal</h2><span className="goal-symbol"><AppIcon name="focus" /></span></div>
@@ -210,7 +200,6 @@ function App() {
           </div>
         </section>
       </main>
-      <footer className="app-footer">A little focus, a little rest, and a bunny by your side. <span aria-hidden="true">♡</span></footer>
     </div>
   )
 }

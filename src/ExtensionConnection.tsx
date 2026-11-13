@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { APP_ORIGIN } from './integration/localConfig'
 import type { PetState } from './petState'
@@ -24,17 +24,17 @@ function connectionStatus(pet: PetState, sync: ConnectionProps['sync']) {
 
 function statusGuidance(status: string) {
   switch (status) {
-    case 'Tracking': return 'Your active browser time is syncing with Mochi.'
-    case 'Paused': return 'Take your time. Resume in Mochi’s Brave popup when you’re ready.'
-    case 'Tracking off': return 'Turn on tracking in Mochi’s Brave popup to begin.'
-    case 'Idle': return 'Counting waits while you’re away.'
-    case 'Browser unfocused': return 'Counting waits until Brave is focused again.'
+    case 'Tracking': return 'Active browser time is syncing with Mochi.'
+    case 'Paused': return 'Resume in Mochi’s Brave popup whenever you’re ready.'
+    case 'Tracking off': return 'Enable tracking in Mochi’s Brave popup to begin.'
+    case 'Idle': return 'Waiting until you’re active again.'
+    case 'Browser unfocused': return 'Counting resumes when Brave is focused.'
     case 'No supported website': return 'Open an HTTP(S) website in Brave to record time.'
-    case 'Approval needed': return 'Open Mochi’s Brave popup to approve your connection.'
-    case 'Requesting approval': return 'Asking your extension for connection approval…'
-    case 'Connection lost': return 'Your saved progress is safe. Check your connection in Settings.'
-    case 'Checking connection': return 'Checking your saved connection with Brave…'
-    default: return 'Connect Mochi’s Brave extension to bring your day here.'
+    case 'Approval needed': return 'Approve the connection in Mochi’s Brave popup.'
+    case 'Requesting approval': return 'Requesting permission from your extension…'
+    case 'Connection lost': return 'Your saved progress is safe. Review your connection.'
+    case 'Checking connection': return 'Verifying your connection with Brave…'
+    default: return 'Bring your browser activity into Mochi.'
   }
 }
 
@@ -52,11 +52,10 @@ function TrackingDetails({ authorityStarted }: { authorityStarted: boolean }) {
     <details className="tracking-details">
       <summary>How tracking works</summary>
       <ul>
-        <li>Only the active tab in focused Brave counts. Paused, idle, and unfocused time stops counting. Timing is an estimate, with a 60-second idle threshold.</li>
-        <li>Automatic categories estimate website purpose. Optional extension overrides take priority; unknown sites stay Neutral. Rest is always intentional.</li>
-        <li>Only category and time summaries reach this app. Current website details stay in the extension popup; page contents and full URLs are not synced.</li>
-        <li>{authorityStarted ? 'Browser Focus supplies new rewards and goal progress. Manual and timer entries stay in history without extra rewards, including while disconnected, to avoid counting overlapping time twice.' : 'First connection keeps existing progress and starts importing future browser time. Browser Focus then supplies new rewards; manual and timer tools remain available without extra rewards.'}</li>
-        <li>Every 15 accumulated Focus minutes earns 5 XP and 2 food credits, up to 240 reward-eligible minutes per local day. Your personal goal is separate.</li>
+        <li><strong>Counting:</strong> only the active tab in focused Brave counts. Pause, idle, or loss of focus stops counting. Estimates include a 60-second idle grace period.</li>
+        <li><strong>Categories:</strong> website defaults are estimates, with optional overrides. Unknown sites stay Neutral; Rest is intentional.</li>
+        <li><strong>Privacy:</strong> only category/time summaries sync. Website details stay in the popup; page contents and full URLs do not reach this app.</li>
+        <li><strong>Rewards:</strong> 15 Focus minutes earns 5 XP and 2 credits, capped at 240 eligible minutes per local day. {authorityStarted ? 'Browser Focus supplies new rewards and goal progress; optional manual/timer records do not add extra rewards, even while disconnected.' : 'Connecting preserves your progress and imports future time. Browser Focus then supplies new rewards; optional manual/timer records do not add extra rewards.'} This avoids overlapping rewards. Your personal goal is separate.</li>
       </ul>
     </details>
   )
@@ -67,7 +66,7 @@ export function TrackingCard({ pet, sync, openSettings }: Pick<ConnectionProps, 
   return (
     <section className="panel tracking-card" aria-labelledby="tracking-heading">
       <div className="card-heading">
-        <h2 id="tracking-heading">Browser activity</h2>
+        <h2 id="tracking-heading">Browser tracking</h2>
         <span className="status-badge" data-connected={sync.connected} role="status" aria-live="polite" aria-atomic="true">
           <span className="tracking-dot" aria-hidden="true" />{status}
         </span>
@@ -75,7 +74,7 @@ export function TrackingCard({ pet, sync, openSettings }: Pick<ConnectionProps, 
       <p className="tracking-summary">{statusGuidance(status)}</p>
       <LastSync pet={pet} />
       <div className="tracking-actions">
-        <button className="adopt-button secondary-button" type="button" onClick={openSettings}>{sync.connected ? 'Connection settings' : 'Set up connection'}</button>
+        <button className="adopt-button secondary-button" type="button" onClick={openSettings}>{sync.pending ? 'Approval steps' : pet.extensionSync.pairing ? 'Connection settings' : 'Connect in Settings'}</button>
       </div>
       <TrackingDetails authorityStarted={pet.extensionSync.authorityStartedAt !== null} />
     </section>
@@ -107,7 +106,7 @@ export function ExtensionConnection({ pet, canPersist, sync }: ConnectionProps) 
           <input id="extension-id" type="text" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={32}
             value={extensionId} onChange={(event) => setExtensionId(event.target.value)} disabled={sync.pending || sync.requesting}
             aria-describedby="extension-id-help connection-consent" />
-          <p className="help-text" id="extension-id-help">Copy the ID from Mochi’s popup or brave://extensions with Developer mode on.</p>
+          <p className="help-text" id="extension-id-help">Copy it from Mochi’s popup or brave://extensions with Developer mode on.</p>
           <p className="help-text" id="connection-consent">Request access, then approve <strong>{APP_ORIGIN}</strong> in Mochi’s Brave popup.</p>
           <div className="form-actions">
             <button className="adopt-button" type="submit" disabled={!canPersist || !originAllowed || sync.pending || sync.requesting}>
@@ -115,7 +114,7 @@ export function ExtensionConnection({ pet, canPersist, sync }: ConnectionProps) 
             </button>
           </div>
           {!originAllowed && <p className="field-error">Open this app at {APP_ORIGIN} to connect.</p>}
-          {!canPersist && <p className="help-text">Connecting needs available local storage and safe sharing between app tabs.</p>}
+          {!canPersist && <p className="help-text">Local storage and safe sharing between tabs must be available to connect.</p>}
           {!authorityStarted && pet.timer && <p className="help-text">Save or cancel your active timer before first connecting.</p>}
         </form>
       )}
