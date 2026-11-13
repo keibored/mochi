@@ -10,7 +10,7 @@ The earlier version-1 shape in `src/integration/extensionActivity.ts` is a legac
 
 ## Connection and lifecycle
 
-1. The user enters the existing unpacked extension's `[a-p]{32}` ID in the dashboard and requests a connection. The extension ID is also displayed in its popup. The app uses direct callback-style `chrome.runtime.sendMessage(extensionId, request, callback)`.
+1. The user enters the existing unpacked extension's `[a-p]{32}` ID in **Settings → Browser connection** and requests a connection. The extension ID is also displayed in its popup. The app uses direct callback-style `chrome.runtime.sendMessage(extensionId, request, callback)`.
 2. A random request ID and challenge bind the request. Pending requests expire after **120 seconds**. The extension popup displays the exact origin and requires explicit approval or rejection. Its approval capability is available only to bundled extension pages, not the web request.
 3. Approval alone does not activate ingestion, enable tracking, or resume a paused tracker. The enabled/paused preference stays unchanged. A real connection can correctly report Tracking off or Paused.
 4. Before first activation, the user saves or cancels any active timer. Under the existing Web Lock, the app durably reserves reward authority and captures all already-present Focus totals as the one-time baseline. Existing balances remain authoritative and are never replayed or reduced.
@@ -21,6 +21,8 @@ The earlier version-1 shape in `src/integration/extensionActivity.ts` is a legac
 Same-epoch explicit reapproval rotates the token while keeping the original cutoff, buffered summaries, accepted ledger, and reward baseline. A new epoch preserves previously accepted web progress and the baseline, but imports only its own post-cutoff summaries. The previous popup-only history is not replayed.
 
 Live state is ephemeral and becomes unverified after an error, when the app is hidden, or when its verified response is older than **15 seconds**. Last successful sync is historical, not evidence of a currently running tracker. Stored pairings, activity, rules, or a user-controlled toggle never establish connection status.
+
+The redesigned Home status card and Settings connection form consume one shared sync controller mounted at the app level. Switching views does not stop syncing or start a second receiver. The privacy boundary is unchanged: current hostname/category/origin details stay in the extension popup. Home shows browser category totals and intentional manual Rest separately; the daily focus goal retains the captured pre-connection Focus baseline. Activity history keeps source labels and does not claim a summed total for potentially overlapping records.
 
 ## Transport and validation boundary
 

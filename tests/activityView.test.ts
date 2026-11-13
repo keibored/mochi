@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import process from 'node:process'
-import { dashboardSummary, formatMinutes, recentActivityView } from '../src/integration/activityView.ts'
+import { browserSummary, dashboardSummary, focusBaselineForDate, formatMinutes, recentActivityView } from '../src/integration/activityView.ts'
 import { freshWebSync } from '../src/integration/syncDomain.ts'
 import type { SyncSummaryV2 } from '../src/integration/syncDomain.ts'
 import type { Activity } from '../src/rewards.ts'
@@ -30,6 +30,40 @@ test('primary totals exclude post-authority optional overlap while preserving in
   const sync = { ...freshWebSync(), authorityStartedAt: before, baselineFocusMinutes: { '2026-11-12': 30 }, summaries: [summary('browser-focus', 'Focus', 90_000), summary('browser-neutral', 'Neutral', 30_000)] }
   assert.deepEqual(dashboardSummary(entries, sync, new Date(after)), { Focus: 31.5, Leisure: 30, Rest: 30, Neutral: 0.5 })
   assert.equal(entries.length, 7, 'optional entries stay in the original history')
+})
+
+test('browser-only totals exclude prior baseline and overlapping optional records', () => {
+  const entries = [activity('manual-focus', 'Focus'), activity('timer-focus', 'Focus', after, 'Timer'), activity('manual-rest', 'Rest')]
+  const sync = { ...freshWebSync(), authorityStartedAt: before, baselineFocusMinutes: { '2026-11-12': 30 },
+    summaries: [summary('tracked-focus', 'Focus', 90_000), summary('tracked-fun', 'Leisure', 30_000), summary('tracked-neutral', 'Neutral', 15_000)] }
+  assert.deepEqual(browserSummary(sync, new Date(after)), { Focus: 1.5, Leisure: 0.5, Rest: 0, Neutral: 0.25 })
+  assert.equal(dashboardSummary(entries, sync, new Date(after)).Focus, 31.5, 'goal retains the already-rewarded Focus baseline')
+  assert.equal(dashboardSummary(entries, sync, new Date(after)).Rest, 30, 'intentional Rest stays a separate manual total')
+  assert.deepEqual(sync.baselineFocusMinutes, { '2026-11-12': 30 })
+})
+
+test('browser totals and baseline use padded local dates for single-digit months and days', () => {
+  const at = new Date(2026, 0, 9, 12)
+  const tracked = { ...summary('january-focus', 'Focus', 90_000),
+    startedAtIso: at.toISOString(), endedAtIso: new Date(at.getTime() + 90_000).toISOString(), localDate: '2026-01-09' }
+  const sync = { ...freshWebSync(), authorityStartedAt: at.getTime(), baselineFocusMinutes: { '2026-01-09': 45 }, summaries: [tracked] }
+  assert.equal(browserSummary(sync, at).Focus, 1.5)
+  assert.equal(focusBaselineForDate(sync, at), 45)
+  assert.equal(focusBaselineForDate(sync, new Date(2026, 0, 10, 12)), 0)
+})
+
+test('browser totals and baseline switch at local midnight rather than the UTC day', () => {
+  const midnight = new Date(2026, 0, 10)
+  const prior = { ...summary('before-midnight', 'Focus', 60_000),
+    startedAtIso: new Date(midnight.getTime() - 60_000).toISOString(), endedAtIso: midnight.toISOString(), localDate: '2026-01-09' }
+  const next = { ...summary('after-midnight', 'Leisure', 30_000),
+    startedAtIso: midnight.toISOString(), endedAtIso: new Date(midnight.getTime() + 30_000).toISOString(), localDate: '2026-01-10' }
+  const sync = { ...freshWebSync(), authorityStartedAt: before,
+    baselineFocusMinutes: { '2026-01-09': 15, '2026-01-10': 5 }, summaries: [prior, next] }
+  assert.deepEqual(browserSummary(sync, new Date(midnight.getTime() - 1)), { Focus: 1, Leisure: 0, Rest: 0, Neutral: 0 })
+  assert.deepEqual(browserSummary(sync, midnight), { Focus: 0, Leisure: 0.5, Rest: 0, Neutral: 0 })
+  assert.equal(focusBaselineForDate(sync, new Date(midnight.getTime() - 1)), 15)
+  assert.equal(focusBaselineForDate(sync, midnight), 5)
 })
 
 test('captured Focus baseline preserves already-saved entries at the reservation timestamp or after clock changes', () => {
