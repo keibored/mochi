@@ -61,23 +61,21 @@ function TrackingDetails({ authorityStarted }: { authorityStarted: boolean }) {
   )
 }
 
-export function TrackingCard({ pet, sync, openSettings }: Pick<ConnectionProps, 'pet' | 'sync'> & { openSettings: () => void }) {
+export function HomeTrackingStatus({ pet, sync, openSettings }: Pick<ConnectionProps, 'pet' | 'sync'> & { openSettings: () => void }) {
   const status = connectionStatus(pet, sync)
+  const lastSync = pet.extensionSync.lastSuccessfulSyncAt
+  const feedback = sync.notice === 'Connection approved. Browser activity is now syncing automatically.' ? '' : sync.notice
   return (
-    <section className="panel tracking-card" aria-labelledby="tracking-heading">
-      <div className="card-heading">
-        <h2 id="tracking-heading">Browser tracking</h2>
-        <span className="status-badge" data-connected={sync.connected} role="status" aria-live="polite" aria-atomic="true">
-          <span className="tracking-dot" aria-hidden="true" />{status}
-        </span>
-      </div>
-      <p className="tracking-summary">{statusGuidance(status)}</p>
-      <LastSync pet={pet} />
-      <div className="tracking-actions">
-        <button className="adopt-button secondary-button" type="button" onClick={openSettings}>{sync.pending ? 'Approval steps' : pet.extensionSync.pairing ? 'Connection settings' : 'Connect in Settings'}</button>
-      </div>
-      <TrackingDetails authorityStarted={pet.extensionSync.authorityStartedAt !== null} />
-    </section>
+    <div className="home-tracking-status" role="group" aria-label="Browser tracking">
+      <span className="status-badge" data-connected={sync.connected} role="status" aria-live="polite" aria-atomic="true">
+        <span className="tracking-dot" aria-hidden="true" />{status}
+      </span>
+      <button className="adopt-button secondary-button" type="button" onClick={openSettings}>{sync.pending ? 'Approval steps' : pet.extensionSync.pairing ? 'Settings' : 'Set up tracking'}</button>
+      {lastSync !== null && <span className="home-tracking-sync">Synced <time dateTime={new Date(lastSync).toISOString()}>{new Date(lastSync).toLocaleString(undefined, {
+        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+      })}</time></span>}
+      <p className="home-tracking-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
+    </div>
   )
 }
 
