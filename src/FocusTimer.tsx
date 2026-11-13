@@ -63,9 +63,8 @@ export function FocusTimer({ session, dispatch, canPersist, busy }: Props) {
 
   return (
     <section className="panel timer-card" aria-labelledby="timer-heading">
-      <p className="welcome-label">ONE LITTLE FOCUS SESSION</p>
-      <h2 id="timer-heading">Focus Timer</h2>
-      <p id="timer-help" className="help-text">A running timer continues while this page is closed. This measures elapsed time, not verified activity. Paused time does not count.</p>
+      <h2 id="timer-heading" tabIndex={-1}>Focus timer</h2>
+      <p id="timer-help" className="help-text">An optional elapsed-time session, not verified activity.</p>
       <p className="timer-countdown" role="timer" aria-label="Time remaining" aria-live="off">{display}</p>
       <p className="timer-status" role="status" aria-live="polite" aria-atomic="true">{stateLabel || feedback || 'Ready for a little focus?'}</p>
       {!session ? (
@@ -74,7 +73,7 @@ export function FocusTimer({ session, dispatch, canPersist, busy }: Props) {
           <input id="timer-duration" type="number" inputMode="numeric" min={MIN_TIMER_MINUTES} max={MAX_TIMER_MINUTES} step="1" value={duration}
             onChange={(event) => { setDuration(event.target.value); setError('') }}
             aria-invalid={Boolean(error)} aria-describedby={`timer-help timer-range${error ? ' timer-error' : ''}`} />
-          <p id="timer-range" className="help-text">Whole minutes, from 1 to 120. Default: 25.</p>
+          <p id="timer-range" className="help-text">1–120 whole minutes.</p>
           {error && <p id="timer-error" className="field-error" role="alert">{error}</p>}
           <button className="adopt-button" type="submit" disabled={busy || !canPersist}>Start</button>
         </form>
@@ -92,7 +91,7 @@ export function FocusTimer({ session, dispatch, canPersist, busy }: Props) {
       )}
       {session && cancelId === session.id && (
         <div id="timer-cancel-confirmation" className="timer-cancel" role="group" aria-labelledby="cancel-question">
-          <p id="cancel-question" role="alert">Cancel this session? Its time will not be saved and it will earn no rewards.</p>
+          <p id="cancel-question" role="alert">Cancel this session? No time or rewards will be added.</p>
           <div className="timer-controls">
             <button className="adopt-button" type="button" disabled={busy || !canPersist} onClick={() => void act('timer-cancel')}>Yes, cancel session</button>
             <button className="adopt-button secondary-button" type="button" onClick={() => setCancelId(null)}>Keep session</button>
@@ -100,8 +99,12 @@ export function FocusTimer({ session, dispatch, canPersist, busy }: Props) {
         </div>
       )}
       {session && feedback && <p role="status">{feedback}</p>}
-      {!canPersist && <p className="help-text">The timer needs available local storage and browser support for safe sharing between tabs. Manual logging is still available for this session.</p>}
-      <p className="help-text">Saved sessions count toward the local date they finished, even when saved on a later day. Only one timer can be active across your Mochi tabs.</p>
+      {!canPersist && <p className="help-text">The timer needs available storage and safe tab coordination. You can still log time manually for this visit.</p>}
+      <details className="help-disclosure timer-details">
+        <summary>About this timer</summary>
+        <p>A running timer continues while the page is closed. Paused time does not count. Complete a session, then save it to your activity history.</p>
+        <p>Sessions use the local date they finished, even if saved later. Only one timer can be active across your Mochi tabs.</p>
+      </details>
     </section>
   )
 }

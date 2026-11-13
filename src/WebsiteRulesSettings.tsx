@@ -18,7 +18,7 @@ export function WebsiteRulesSettings({ rules, dispatch, busy, canPersist }: Prop
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
   const hostnameField = useRef<HTMLInputElement>(null)
-  let preview = 'Enter a website to preview its category in this dashboard rule list.'
+  let preview = 'Enter a website to preview its category.'
   if (hostname.trim()) {
     try {
       const host = normalizeHostname(hostname)
@@ -41,58 +41,68 @@ export function WebsiteRulesSettings({ rules, dispatch, busy, canPersist }: Prop
     if (result.error) { setError(result.error); return }
     const changed = await dispatch({ type: 'rule-save', hostname, category, originalHostname: editing })
     if (!changed) { setError('Rules changed in another tab. Review them and try again.'); return }
-    setFeedback('Website override updated. Past activities and rewards are unchanged.')
+    setFeedback('Dashboard override saved. Past activities and rewards are unchanged.')
     reset()
     hostnameField.current?.focus()
   }
 
   async function remove(rule: WebsiteRule) {
     const changed = await dispatch({ type: 'rule-remove', hostname: rule.hostname })
-    setFeedback(changed ? `Override removed for ${rule.hostname}. Automatic classification or Neutral fallback is restored in this list. Past activities and rewards are unchanged.` : 'This override was already removed in another tab.')
+    setFeedback(changed ? `Override removed for ${rule.hostname}. This list now uses its automatic category or Neutral fallback.` : 'This override was already removed in another tab.')
     if (editing === rule.hostname) reset()
     hostnameField.current?.focus()
   }
 
   return (
     <section className="panel website-settings" aria-labelledby="website-settings-heading">
-      <h2 id="website-settings-heading">Adjust website categories</h2>
-      <p id="website-rules-help">Automatic categories need no setup. Active browser tracking uses the bundled defaults and optional overrides in Mochi’s Brave extension settings. These saved dashboard overrides are kept separately and never overwrite the extension’s rules.</p>
-      <p className="help-text">Categories estimate a website’s usual purpose, not your intent. Unknown and mixed-purpose websites record Neutral time. Your overrides match exact hostnames only: example.com does not include www.example.com or other subdomains. The automatic catalog includes subdomains only where explicitly configured. Rest stays intentional.</p>
-      <form onSubmit={save} noValidate>
-        <label htmlFor="website-hostname">Website hostname or HTTP(S) URL</label>
-        <input id="website-hostname" ref={hostnameField} type="text" autoCapitalize="none" autoCorrect="off" spellCheck={false}
-          value={hostname} onChange={(event) => { setHostname(event.target.value); setError('') }}
-          aria-invalid={Boolean(error)} aria-describedby={`website-rules-help hostname-help website-classification-preview${error ? ' hostname-error' : ''}`} />
-        <p className="help-text" id="hostname-help">Only the hostname is saved. Paths, query strings, fragments, and URL ports are discarded. Use a full HTTP(S) URL when including a port.</p>
-        <p className="help-text" id="website-classification-preview">{preview}</p>
-        {error && <p id="hostname-error" className="field-error" role="alert">{error}</p>}
-        <label htmlFor="website-category">Your override category</label>
-        <select id="website-category" value={category} onChange={(event) => {
-          if (isWebsiteCategory(event.target.value)) setCategory(event.target.value)
-        }}>
-          {WEBSITE_CATEGORIES.map((item) => <option key={item}>{item}</option>)}
-        </select>
-        <div className="rule-actions">
-          <button className="adopt-button" type="submit" disabled={busy}>{editing ? 'Save override changes ♡' : 'Save dashboard override ♡'}</button>
-          {editing && <button className="adopt-button secondary-button" type="button" onClick={() => { reset(); hostnameField.current?.focus() }}>Cancel edit</button>}
-        </div>
-      </form>
-      <p className="help-text" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
-      {!canPersist && <p className="help-text">Saving is unavailable. Override changes are session-only and will not survive a refresh.</p>}
-      {rules.length === 0 ? <p className="empty-state">No dashboard overrides. Automatic categories are ready; unknown and mixed-purpose websites use Neutral. Tracking needs no manual rules.</p> : (
-        <ul className="website-rule-list">
-          {[...rules].sort((a, b) => a.hostname.localeCompare(b.hostname)).map((rule) => (
-            <li key={rule.hostname}>
-              <div><strong>{rule.hostname}</strong><span>{rule.category} · Your override · exact hostname</span></div>
-              <div className="rule-actions">
-                <button className="adopt-button secondary-button" type="button" disabled={busy} aria-label={`Edit override for ${rule.hostname}`}
-                  onClick={() => { setEditing(rule.hostname); setHostname(rule.hostname); setCategory(rule.category); setError(''); setFeedback(`Editing ${rule.hostname}.`); hostnameField.current?.focus() }}>Edit</button>
-                <button className="adopt-button secondary-button" type="button" disabled={busy} aria-label={`Remove override for ${rule.hostname}`} onClick={() => void remove(rule)}>Remove override</button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="section-heading"><h2 id="website-settings-heading">Website categories</h2></div>
+      <p>Mochi sorts supported websites automatically. Adjust a category whenever you need.</p>
+      <p className="help-text">For live tracking, use <strong>Adjust website categories</strong> in Mochi’s Brave popup. Unknown and mixed-purpose sites stay Neutral; categories estimate website purpose, not your intent.</p>
+      <details className="website-overrides">
+        <summary>Saved dashboard overrides <span>({rules.length})</span></summary>
+        <p className="help-text" id="website-rules-help">This separate dashboard list is preserved for you. Changes here do not update the extension’s live rules or past activities. Removing an override restores its automatic category or Neutral fallback in this list.</p>
+        <form onSubmit={save} noValidate>
+          <div className="form-row">
+            <div className="field">
+              <label htmlFor="website-hostname">Hostname or HTTP(S) URL</label>
+              <input id="website-hostname" ref={hostnameField} type="text" maxLength={4096} autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                value={hostname} onChange={(event) => { setHostname(event.target.value); setError('') }}
+                aria-invalid={Boolean(error)} aria-describedby={`website-rules-help hostname-help website-classification-preview${error ? ' hostname-error' : ''}`} />
+            </div>
+            <div className="field">
+              <label htmlFor="website-category">Your override</label>
+              <select id="website-category" value={category} onChange={(event) => {
+                if (isWebsiteCategory(event.target.value)) setCategory(event.target.value)
+              }}>
+                {WEBSITE_CATEGORIES.map((item) => <option key={item}>{item}</option>)}
+              </select>
+            </div>
+          </div>
+          <p className="help-text" id="hostname-help">Exact hostnames only; subdomains need their own override. Only the hostname is saved, with paths and queries discarded.</p>
+          <p className="help-text" id="website-classification-preview">{preview}</p>
+          {error && <p id="hostname-error" className="field-error" role="alert">{error}</p>}
+          <div className="rule-actions">
+            <button className="adopt-button" type="submit" disabled={busy}>{editing ? 'Save changes ♡' : 'Save dashboard override ♡'}</button>
+            {editing && <button className="adopt-button secondary-button" type="button" onClick={() => { reset(); hostnameField.current?.focus() }}>Cancel edit</button>}
+          </div>
+        </form>
+        <p className="help-text" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
+        {!canPersist && <p className="help-text">Saving is unavailable. These changes will not survive a refresh.</p>}
+        {rules.length === 0 ? <p className="empty-state">No dashboard overrides saved. Automatic categories need no setup.</p> : (
+          <ul className="website-rule-list">
+            {[...rules].sort((a, b) => a.hostname.localeCompare(b.hostname)).map((rule) => (
+              <li key={rule.hostname}>
+                <div><strong>{rule.hostname}</strong><span>{rule.category} · Your override</span></div>
+                <div className="rule-actions">
+                  <button className="adopt-button secondary-button" type="button" disabled={busy} aria-label={`Edit override for ${rule.hostname}`}
+                    onClick={() => { setEditing(rule.hostname); setHostname(rule.hostname); setCategory(rule.category); setError(''); setFeedback(`Editing ${rule.hostname}.`); hostnameField.current?.focus() }}>Edit</button>
+                  <button className="adopt-button secondary-button" type="button" disabled={busy} aria-label={`Remove override for ${rule.hostname}`} onClick={() => void remove(rule)}>Remove</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
     </section>
   )
 }

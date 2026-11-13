@@ -6,13 +6,13 @@ The React + TypeScript web app is the main pet dashboard. A companion Manifest V
 
 ## Working now
 
-- A responsive pink-and-cream welcome screen, adoption, emoji bunny, feeding, lifetime XP, and a first milestone of 100 XP.
+- A responsive strawberry-pink and cream app with Home, Activity, and Settings navigation, adoption, an original SVG bunny, feeding, lifetime XP, and a first milestone of 100 XP. Cozy, happy, sleepy, and focusing expressions follow real reactions and timer state.
 - Extension tracking of the active HTTP(S) tab in the focused browser window while the user is active, with Enable, Pause, Resume, idle handling, and a popup showing real local Focus, Leisure, and Neutral totals.
 - An explicitly approved Brave-to-dashboard connection at **`http://localhost:5173`**. The dashboard shows a freshly verified tracking state and last successfully saved sync; saved data alone never means connected.
 - Today's category summary, a separate daily Focus goal, and recent activities labeled **Manual**, **Timer**, or **Extension**. Browser totals retain fractional minutes. Rest stays intentional, never inferred from inactivity.
 - Bundled automatic website categories, with optional exact-hostname overrides. Clear learning/work tools default to Focus, entertainment services to Leisure, and unknown or mixed-purpose sites to Neutral. The popup shows Automatic, Your override, or Unclassified. Tracking uses the extension's overrides; dashboard overrides remain separate and never overwrite them.
 - Manual Focus, Leisure, Rest, and Neutral entries: 1–240 whole minutes and an optional note of up to 200 characters.
-- A persistent Focus Timer: 1–120 whole minutes, default 25, with Start, Pause, Resume, confirmed cancellation, and Save session after completion. An active timer stays visible when **Other ways to record time** is collapsed.
+- A persistent Focus Timer: 1–120 whole minutes, default 25, with Start, Pause, Resume, confirmed cancellation, and Save session after completion. Optional tools live in Activity; a compact timer indicator stays visible when you navigate elsewhere.
 - Focus rewards of **5 XP and 2 food credits per accumulated 15 minutes**, limited to the first **240 Focus minutes per local day**. Partial browser minutes remain exact milliseconds in reward calculations. Other categories never subtract rewards.
 - Feeding for exactly 2 credits without changing XP. A daily Focus goal defaults to 60 minutes and accepts 15–480 whole minutes; changing it never awards rewards.
 - Validated versioned persistence and cross-tab coordination preserving adoption, activities, goals, timer state, XP, and spent credits.
@@ -20,6 +20,14 @@ The React + TypeScript web app is the main pet dashboard. A companion Manifest V
 Before first connecting, the existing manual/timer reward rules apply: a fresh 30-minute Focus entry earns 10 XP and 4 credits; feeding once leaves 10 XP and 2 credits. After first connecting, browser Focus supplies new rewards and Focus goal progress. Optional Manual/Timer entries still save to history without extra rewards, including while paused or disconnected. Intentional manual Rest still counts in the daily summary. This prevents overlapping entries from earning twice.
 
 Website setup is optional. Classification uses **your exact-hostname override → the most specific bundled default → Neutral**. Categories estimate a website's usual purpose; they do not prove what you are doing. General GitHub and YouTube stay Neutral, while dedicated documentation/music hostnames can differ. **Adjust website categories** lets you override any default, including with Neutral; removing an override restores the bundled default or the Neutral fallback. Existing rules remain overrides. Changes apply only to future time, without changing history or rewards. See [catalog scope, matching, and maintenance](docs/website-classification.md).
+
+## Around your Mochi home
+
+- **Home:** Mochi, feeding, XP, real browser status, today's source-labeled minutes, a separate daily goal, and three recent activities. Once tracking is authoritative, Focus/Leisure/Neutral show browser time; intentional manual Rest is shown separately. The goal also retains Focus saved before connection and labels that baseline when present.
+- **Activity:** full saved history, shown 20 entries at a time, with Manual/Timer/Extension source labels; the focus timer and manual form are optional tools below. Records may overlap, so history is not presented as a combined time total.
+- **Settings:** the daily focus goal, the actual Brave connection form, and optional website settings. Existing dashboard overrides remain accessible in a disclosure; live tracking overrides still belong to the extension.
+
+Navigation keeps forms mounted, preserving drafts while switching views. One sync controller continues across all views. Tracking details and reward/timer limitations live in accessible disclosures. This presentation change does not alter saved-data schemas or domain rules.
 
 ## Rebuild, reload, and connect in Brave
 
@@ -39,7 +47,7 @@ C:\Users\keish\OneDrive\Documents\mochi\extension\dist
 1. Use the same **Brave profile** that contains your pet progress and existing extension. Keep the current dev server running, or start it with `npm.cmd run dev`. Open **`http://localhost:5173/`**. Vite uses port 5173 with `strictPort`: it exits if occupied rather than changing origin. The production preview's different port is not allowlisted.
 2. Open **`brave://extensions`**, enable **Developer mode**, and click **Reload** on the **existing unpacked Mochi extension**. Its card should show version **0.3.0**. Keep the same installation and its saved rules/preferences.
 3. Refresh the web app. Save or cancel an existing active timer before the **first** connection; the app never resolves it automatically.
-4. Copy Mochi's 32-letter extension ID from its popup or `brave://extensions`. Enter it in the dashboard's **Mochi extension ID** field and click **Connect in Brave**.
+4. Copy Mochi's 32-letter extension ID from its popup or `brave://extensions`. Open **Settings → Browser connection**, enter it in **Mochi extension ID**, and click **Connect in Brave**.
 5. Open that extension's popup and explicitly approve **`http://localhost:5173`** within two minutes. Return to the dashboard; a real response and successful local save establish the connected state.
 6. If tracking is off or paused, use the popup's existing **Enable tracking** or **Resume** control. Approval does **not** enable or resume tracking automatically. **Connected · Tracking off** and **Connected · Paused** are valid states.
 
@@ -93,11 +101,11 @@ All app mutations read the newest record under a shared Web Lock, preventing dup
 2. Without adding rules, actively browse `developer.mozilla.org` and `www.netflix.com` about 30 seconds each. The popup should show **Focus · Automatic** and **Leisure · Automatic**, respectively, unless an existing override takes precedence. After returning to Mochi, both categories should increase, labeled **Extension**. Unknown sites such as `example.org` should accumulate **Neutral · Unclassified**.
 3. Pause in the popup, wait, then return to the dashboard. Confirm the actual paused state and no added paused time. Resume and test tab switches, window focus, and idle handling using the extension guide. Rest must never be inferred.
 4. Accumulate a new 15-minute browser Focus block: it earns 5 XP and 2 credits, subject to today's baseline/cap. Refresh or open another app tab; the same summaries must not reward again. Feeding spends 2 credits without changing XP.
-5. Save each Manual category and a Timer session. After connection they stay in history without extra Focus rewards or goal progress; intentional Rest updates the summary. Change the goal and confirm balances do not change.
-6. Refresh both surfaces and verify pet progress, extension rules, and pairing persist. Check desktop/mobile layout, keyboard controls, focus outlines, and the collapsed active-timer notice.
+5. In **Activity**, save each Manual category and a Timer session. After connection they stay in history without extra Focus rewards or goal progress; intentional Rest updates the summary. In **Settings**, change the goal and confirm balances do not change.
+6. Switch between all three views with unfinished form values and an active timer. Drafts should remain, and the timer indicator should open the controls in Activity. Feed Mochi on Home and check the temporary happy expression. Manual Rest gives a temporary sleepy expression; a running timer gives a focusing expression. Refresh both surfaces and verify saved progress, rules, and pairing persist. Check desktop/mobile layout, keyboard controls, and focus outlines. Form drafts are preserved during navigation, not across reloads.
 7. In the extension's **Adjust website categories**, override `developer.mozilla.org` to Neutral. New time should use **Neutral · Your override**, while earlier Focus totals and balances remain unchanged. Remove the override to restore **Focus · Automatic** for future time. Existing exact-hostname rules do not implicitly include subdomains.
 
-The user manually confirmed the earlier extension's Focus/Leisure/Neutral accounting and paused popup in Brave. **The new sync bridge has not been verified in a real browser in this environment.** Unit and mocked API tests do not prove Brave external-message delivery, popup approval, or page integration end to end. Check results for a particular change are reported separately.
+The user manually confirmed the earlier extension's Focus/Leisure/Neutral accounting and paused popup in Brave. **The new sync bridge and redesigned layouts/interactions have not been verified in a real browser in this environment.** Unit and mocked API tests do not prove Brave external-message delivery, popup approval, navigation, visual layout, or page integration end to end. Check results for a particular change are reported separately.
 
 ## Integration boundary and remaining work
 
@@ -109,4 +117,4 @@ Backend services, account authentication, remote/device sync, automatic rule syn
 
 `origin` is <https://github.com/keibored/mochi>. `main` is the stable baseline. Use a feature branch per increment, focused commits, relevant tests/lint/builds and `git diff --check`, a reviewed diff, and pull requests. Never force-push, discard others' work, or commit secrets, dependencies, build output, or logs. Visibility and remotes change only at the owner's direction.
 
-`feature/automatic-classification` targets `feature/extension-dashboard-sync` while [sync PR #4](https://github.com/keibored/mochi/pull/4) is open and unmerged. PR #4 depends on [browser tracking PR #3](https://github.com/keibored/mochi/pull/3), then [tracking dashboard PR #2](https://github.com/keibored/mochi/pull/2) and [timer PR #1](https://github.com/keibored/mochi/pull/1). Keep these PRs unmerged for review. Once parents merge, retarget/reconcile dependent branches against `main` without duplicating their changes. Continue the main web experience and companion integration in focused increments; backend work remains a later phase.
+`feature/cozy-ui` targets `feature/automatic-classification` while [classification PR #5](https://github.com/keibored/mochi/pull/5) is open and unmerged. The redesign is a separate commit. PR #5 depends on [sync PR #4](https://github.com/keibored/mochi/pull/4), [browser tracking PR #3](https://github.com/keibored/mochi/pull/3), [tracking dashboard PR #2](https://github.com/keibored/mochi/pull/2), and [timer PR #1](https://github.com/keibored/mochi/pull/1). Keep these PRs unmerged for review. Once parents merge, retarget/reconcile dependent branches against `main` without duplicating their changes. Continue the main web experience and companion integration in focused increments; backend work remains a later phase.

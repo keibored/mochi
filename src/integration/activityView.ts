@@ -7,6 +7,20 @@ function extensionDay(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+/** Only actual browser aggregates; optional records and baseline stay separate. */
+export function browserSummary(sync: WebSyncState, date: Date): Record<ActivityCategory, number> {
+  const totals = { Focus: 0, Leisure: 0, Rest: 0, Neutral: 0 }
+  const day = extensionDay(date)
+  for (const summary of sync.summaries) {
+    if (summary.localDate === day) totals[summary.category] += summary.activeDurationMs / 60_000
+  }
+  return totals
+}
+
+export function focusBaselineForDate(sync: WebSyncState, date: Date): number {
+  return sync.baselineFocusMinutes[extensionDay(date)] ?? 0
+}
+
 export function dashboardSummary(activities: readonly Activity[], sync: WebSyncState, date: Date): Record<ActivityCategory, number> {
   const totals = { Focus: 0, Leisure: 0, Rest: 0, Neutral: 0 }
   const day = extensionDay(date)

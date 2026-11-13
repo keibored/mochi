@@ -20,7 +20,7 @@ C:\Users\keish\OneDrive\Documents\mochi\extension\dist
 1. Open **`brave://extensions`** and enable **Developer mode**.
 2. Click **Reload** on your **existing unpacked Mochi extension**. Keep that installation so its rules, preferences, and saved totals remain available. Rebuilding/reloading uses the same folder; do not load a duplicate.
 3. Keep the web dev server running, or start it with `npm.cmd run dev`. Refresh **`http://localhost:5173/`** in **Brave**. Vite is fixed to 5173 with `strictPort`; another port, `127.0.0.1`, HTTPS, or production preview does not match this bridge.
-4. Save or cancel any active timer before first connection. Copy the 32-letter ID from Mochi's popup or `brave://extensions`, paste it into the dashboard, and click **Connect in Brave**.
+4. In the app's **Activity** view, save or cancel any active timer before first connection. Copy the 32-letter ID from Mochi's popup or `brave://extensions`, open **Settings → Browser connection** in the app, paste it there, and click **Connect in Brave**.
 5. Open the existing Mochi popup and explicitly approve **`http://localhost:5173`**. Return to the app. Requests expire after two minutes; if expired, request again.
 6. Use **Enable tracking** or **Resume** in the popup if needed. Connection approval preserves the existing enabled/paused preference; it never enables or resumes tracking by itself. A connected app may correctly report **Tracking off**, **Paused**, **Idle**, **Browser unfocused**, or **No supported website**.
 

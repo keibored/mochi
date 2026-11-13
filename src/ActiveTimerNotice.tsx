@@ -20,9 +20,11 @@ export function ActiveTimerNotice({ session, openTools }: { session: TimerSessio
   const clock = `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`
   return (
     <section className="active-timer-notice" aria-label="Active focus timer">
-      <p role="status" aria-live="polite">{complete ? 'Focus session complete ♡' : session.runningSince === null ? 'Focus timer paused.' : 'Focus timer running.'}</p>
-      <p aria-live="off">{clock} remaining · optional focus session</p>
-      <button className="adopt-button secondary-button" type="button" aria-controls="recording-tools" onClick={openTools}>Open timer controls</button>
+      <div>
+        <p role="status" aria-live="polite" aria-atomic="true">{complete ? 'Focus session complete ♡' : session.runningSince === null ? 'Focus paused' : 'Focus in progress'}</p>
+        <p aria-live="off">{clock} remaining</p>
+      </div>
+      <button className="adopt-button secondary-button" type="button" aria-controls="activity-view" onClick={openTools}>View timer</button>
     </section>
   )
 }
