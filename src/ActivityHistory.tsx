@@ -4,8 +4,8 @@ import type { RecentActivity } from './integration/activityView'
 
 const categoryIcon = { Focus: 'focus', Leisure: 'leisure', Rest: 'rest', Neutral: 'neutral' } as const
 
-export function ActivityHistory({ activities }: { activities: readonly RecentActivity[] }) {
-  if (!activities.length) return (
+export function ActivityHistory({ activities, compact = false }: { activities: readonly RecentActivity[]; compact?: boolean }) {
+  if (!activities.length) return compact ? <p className="overview-empty">No activities yet. Your saved time will appear here.</p> : (
     <div className="empty-state">
       <span className="empty-icon"><AppIcon name="activity" /></span>
       <div><strong>A fresh little start</strong><p>Browser summaries and saved activities will appear here.</p></div>
@@ -19,9 +19,9 @@ export function ActivityHistory({ activities }: { activities: readonly RecentAct
           <div className="activity-details">
             <strong>{activity.category} <span className="activity-duration">· {formatMinutes(activity.duration)} min</span></strong>
             <div className="activity-meta"><span className="source-badge">{activity.source}</span>{activity.source === 'Extension' && <span>Cumulative browser summary</span>}</div>
-            {activity.note && <p className="activity-note">{activity.note}</p>}
+            {!compact && activity.note && <p className="activity-note">{activity.note}</p>}
           </div>
-          <time dateTime={activity.timestamp}>{new Date(activity.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
+          <time dateTime={activity.timestamp} title={compact ? new Date(activity.timestamp).toLocaleString() : undefined}>{new Date(activity.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', year: compact ? undefined : 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
         </li>
       ))}
     </ul>

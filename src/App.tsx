@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { FocusTimer } from './FocusTimer'
 import { ActiveTimerNotice } from './ActiveTimerNotice'
 import { WebsiteRulesSettings } from './WebsiteRulesSettings'
-import { ExtensionConnection, TrackingCard } from './ExtensionConnection'
+import { ExtensionConnection, HomeTrackingStatus } from './ExtensionConnection'
 import { useExtensionSync } from './useExtensionSync'
 import { useProgress } from './useProgress'
 import { ACTIVITY_CATEGORIES, FEED_COST, isActivityCategory, isValidDuration, isValidGoal, localDateKey, MAX_NOTE_LENGTH, MIN_FOCUS_GOAL, MAX_FOCUS_GOAL } from './rewards'
@@ -139,19 +139,19 @@ function App() {
       </header>
       <main className="app-main" id="main-content" tabIndex={-1}>
         {storageNotice && <p className="storage-notice" role="status">{storageNotice}</p>}
-        {pet.timer && view !== 'Activity' && <ActiveTimerNotice session={pet.timer} openTools={() => navigate('Activity', true)} />}
+        {pet.timer && view === 'Settings' && <ActiveTimerNotice session={pet.timer} openTools={() => navigate('Activity', true)} />}
         <p className="app-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
         {/* Keep every view mounted so navigation preserves unsaved fields and timer controls. */}
         <section id="home-view" className="app-view" hidden={view !== 'Home'} aria-labelledby="home-heading">
-          <div className="view-heading"><h1 id="home-heading" tabIndex={-1}>Your day with {pet.name}</h1></div>
+          <div className="home-heading-row">
+            <div className="view-heading"><h1 id="home-heading" tabIndex={-1}>Your day with {pet.name}</h1></div>
+            <HomeTrackingStatus pet={pet} sync={sync} openSettings={() => navigate('Settings')} />
+          </div>
+          {pet.timer && <div className="home-context-row"><ActiveTimerNotice session={pet.timer} compact openTools={() => navigate('Activity', true)} /></div>}
           <div className="home-grid">
             <PetCard pet={pet} reaction={reaction} busy={busy} onFeed={() => void feed()} />
-            <div className="home-aside">
-              <TrackingCard pet={pet} sync={sync} openSettings={() => navigate('Settings')} />
-              <ActivitySummary pet={pet} today={today} onAdjustGoal={() => navigate('Settings')} />
-            </div>
+            <ActivitySummary pet={pet} today={today} recentActivities={history.slice(0, 3)} onAdjustGoal={() => navigate('Settings')} onViewAll={() => navigate('Activity')} />
           </div>
-          <section className="panel recent-preview" aria-labelledby="recent-heading"><div className="section-heading"><h2 id="recent-heading">Recent moments</h2><button className="text-button" type="button" onClick={() => navigate('Activity')}>View activity <AppIcon name="arrow" /></button></div><ActivityHistory activities={history.slice(0, 3)} /></section>
         </section>
 
         <section id="activity-view" className="app-view" hidden={view !== 'Activity'} aria-labelledby="activity-heading">
