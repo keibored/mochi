@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import process from 'node:process'
+import { readFileSync } from 'node:fs'
 import { TrackerController } from '../src/controller.ts'
 import type { ChromeApi } from '../src/chromeApi.ts'
 import type { ExternalSender } from '../src/syncState.ts'
 import { PAIRING_TTL_MS } from '../src/syncState.ts'
 import { freshState, localDay, STORAGE_KEY } from '../src/model.ts'
 import type { TrackingState } from '../src/model.ts'
-import { APP_ORIGIN, SYNC_PROTOCOL, SYNC_PROTOCOL_VERSION } from '../../src/integration/localConfig.ts'
-import type { SyncReply, SyncRequest } from '../../src/integration/syncProtocol.ts'
+import { APP_ORIGIN, REQUIRED_SYNC_CAPABILITIES, SYNC_PROTOCOL, SYNC_PROTOCOL_VERSION } from '../../src/integration/localConfig.ts'
+import { WEBSITE_CATALOG_VERSION } from '../../src/websiteCatalog.ts'
+import type { SyncPayload, SyncRequest } from '../../src/integration/syncProtocol.ts'
 import { parseSyncSummary } from '../../src/integration/syncDomain.ts'
 import { registerWorker } from '../src/worker.ts'
 
@@ -18,6 +20,7 @@ const extensionId = 'a'.repeat(32)
 const webSender: ExternalSender = { url: `${APP_ORIGIN}/`, origin: APP_ORIGIN, frameId: 0, tab: { incognito: false } }
 const challenge = 'test_challenge_1234567890'
 const requestId = 'pair-request-1'
+const manifest = JSON.parse(readFileSync(new URL('../public/manifest.json', import.meta.url), 'utf8')) as { version: string }
 
 function harness(initial?: unknown) {
   let raw = initial === undefined ? undefined : structuredClone(initial)
@@ -34,7 +37,7 @@ function harness(initial?: unknown) {
       set: async (values) => { if (failWrites) throw new Error('Storage write failed'); raw = structuredClone(values[STORAGE_KEY]) },
     } },
     alarms: { get: async () => undefined, create: async () => undefined, onAlarm: event },
-    runtime: { id: extensionId, getURL: (path) => `chrome-extension://${extensionId}/${path}`,
+    runtime: { id: extensionId, getURL: (path) => `chrome-extension://${extensionId}/${path}`, getManifest: () => ({ version: manifest.version }),
       onStartup: event, onInstalled: event, onMessage: event,
       onMessageExternal: { addListener: (listener) => { externalHandler = listener } },
       sendMessage: async () => undefined, openOptionsPage: async () => undefined },
@@ -48,14 +51,15 @@ function harness(initial?: unknown) {
 }
 
 const envelope = (request: SyncRequest) => ({ protocol: SYNC_PROTOCOL, version: SYNC_PROTOCOL_VERSION, ...request })
-async function ask<K extends SyncReply['kind']>(tracker: TrackerController, request: SyncRequest, kind: K) {
+async function ask<K extends SyncPayload['kind']>(tracker: TrackerController, request: SyncRequest, kind: K) {
   const response = await tracker.external(envelope(request), webSender)
   assert.equal(response.protocol, SYNC_PROTOCOL)
   assert.equal(response.version, SYNC_PROTOCOL_VERSION)
+  assert.deepEqual(response.extensionInfo, { version: manifest.version, catalogVersion: WEBSITE_CATALOG_VERSION, capabilities: [...REQUIRED_SYNC_CAPABILITIES] })
   assert.equal(response.ok, true, !response.ok ? response.error : '')
   if (!response.ok) throw new Error(response.error)
   assert.equal(response.payload.kind, kind)
-  return response.payload as Extract<SyncReply, { kind: K }>
+  return response.payload as Extract<SyncPayload, { kind: K }>
 }
 async function approve(tracker: TrackerController, id = requestId) {
   const result = await tracker.run({ kind: 'sync-approve', requestId: id })
@@ -112,7 +116,7 @@ test('expired approval requests and malformed IDs or challenges cannot authorize
     { kind: 'pair-request', requestId: '', challenge },
     { kind: 'pair-request', requestId: 'x'.repeat(129), challenge },
     { kind: 'pair-request', requestId, challenge: 'short' },
-  ]) assert.equal((await tracker.external({ protocol: SYNC_PROTOCOL, version: 1, ...invalid }, webSender)).ok, false)
+  ]) assert.equal((await tracker.external({ protocol: SYNC_PROTOCOL, version: SYNC_PROTOCOL_VERSION, ...invalid }, webSender)).ok, false)
   await ask(tracker, { kind: 'pair-request', requestId, challenge }, 'pending')
   h.advance(PAIRING_TTL_MS + 1)
   assert.equal((await tracker.run({ kind: 'sync-approve', requestId })).ok, false)

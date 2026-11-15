@@ -68,11 +68,11 @@ test('v5 care migration preserves balances, sources, goal, sync baseline, and pa
   Reflect.deleteProperty(legacy, 'care')
   const serialized = JSON.stringify(legacy)
   const migrated = migratePet(legacy, noon)!
-  assert.equal(migrated.version, 6)
+  assert.equal(migrated.version, 7)
   assert.deepEqual([migrated.care.fullness, migrated.care.energy, migrated.care.dailyLeisureAllowance], [80, 80, 60])
   const preserved = { ...migrated }
   Reflect.deleteProperty(preserved, 'care')
-  assert.deepEqual(preserved, { ...legacy, version: 6 })
+  assert.deepEqual(preserved, { ...legacy, version: 7 })
   assert.deepEqual([migrated.xp, migrated.foodCredits], [15, 4])
   assert.deepEqual(migrated.extensionSync.baselineFocusMinutes, { '2026-11-15': 30 })
   assert.equal(JSON.stringify(legacy), serialized)

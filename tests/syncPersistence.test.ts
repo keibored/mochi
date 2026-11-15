@@ -67,9 +67,9 @@ test('v4 migration preserves complete existing progress and active timer without
   Reflect.deleteProperty(legacy, 'care')
   const original = JSON.stringify(legacy)
   const migrated = migratePet(legacy, noon)!
-  assert.equal(migrated.version, 6)
+  assert.equal(migrated.version, 7)
   assert.deepEqual(migrated.extensionSync, freshWebSync())
-  const expected = { ...legacy, version: 6, extensionSync: freshWebSync() }
+  const expected = { ...legacy, version: 7, extensionSync: freshWebSync() }
   const preserved = { ...migrated }
   Reflect.deleteProperty(preserved, 'care')
   assert.deepEqual(preserved, expected)

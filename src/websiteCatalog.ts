@@ -1,5 +1,8 @@
 import type { WebsiteCategory } from './websiteRules.ts'
 
+/** Bump when the bundled catalog or matching policy changes. */
+export const WEBSITE_CATALOG_VERSION = '2026-11-13.1'
+
 export interface AutomaticWebsiteRule {
   readonly hostname: string
   readonly category: WebsiteCategory

@@ -4,15 +4,16 @@ import type { ClassificationOrigin, WebsiteCategory, WebsiteRule } from '../../s
 import { addTime, classify, CLOCK_TOLERANCE_MS, freshState, hostnameFromTab, IDLE_SECONDS, isTrackingState,
   MAX_GAP_MS, MAX_RULES, migrateTrackingState, prune, statusFor, STORAGE_KEY, todayTotals } from './model.ts'
 import type { Observation, TrackingState, TrackingStatus } from './model.ts'
-import { APP_ORIGIN, SYNC_PROTOCOL, SYNC_PROTOCOL_VERSION } from '../../src/integration/localConfig.ts'
-import type { SyncReply, SyncRequest } from '../../src/integration/syncProtocol.ts'
+import { APP_ORIGIN, REQUIRED_SYNC_CAPABILITIES, SYNC_PROTOCOL, SYNC_PROTOCOL_VERSION } from '../../src/integration/localConfig.ts'
+import { WEBSITE_CATALOG_VERSION } from '../../src/websiteCatalog.ts'
+import type { SyncPayload, SyncRequest } from '../../src/integration/syncProtocol.ts'
 import { parseSyncSummary } from '../../src/integration/syncDomain.ts'
 import { isAllowedWebSender, opaqueId, PAIRING_TTL_MS } from './syncState.ts'
 import type { ExternalSender } from './syncState.ts'
 
 export interface Clock { now(): number; monotonic(): number; id(): string; timeZone(): string }
 export interface Report { state: TrackingState; status: TrackingStatus; hostname: string | null; category: WebsiteCategory; classificationOrigin: ClassificationOrigin; totalsMs: ReturnType<typeof todayTotals>; checkedAt: number }
-export type Response = { ok: true; report: Report; syncReply?: SyncReply } | { ok: false; error: string }
+export type Response = { ok: true; report: Report; syncReply?: SyncPayload } | { ok: false; error: string }
 type Command = { kind: 'report' | 'enable' | 'pause' | 'resume' | 'disable' }
   | { kind: 'rule-save'; hostname: string; category: 'Focus' | 'Leisure' | 'Neutral'; originalHostname?: string }
   | { kind: 'rule-remove'; hostname: string }
@@ -52,8 +53,10 @@ export class TrackerController {
    * change tracking preferences, or obtain hostnames/category rules.
    */
   async external(request: unknown, sender: ExternalSender) {
-    const wrap = (result: { ok: true; payload: SyncReply } | { ok: false; error: string }) =>
-      ({ protocol: SYNC_PROTOCOL, version: SYNC_PROTOCOL_VERSION, ...result })
+    const wrap = (result: { ok: true; payload: SyncPayload } | { ok: false; error: string }) =>
+      ({ protocol: SYNC_PROTOCOL, version: SYNC_PROTOCOL_VERSION,
+        extensionInfo: { version: this.api.runtime.getManifest().version, catalogVersion: WEBSITE_CATALOG_VERSION,
+          capabilities: [...REQUIRED_SYNC_CAPABILITIES] }, ...result })
     if (!isAllowedWebSender(sender)) return wrap({ ok: false, error: 'This app origin is not allowed.' })
     if (typeof request !== 'object' || request === null) return wrap({ ok: false, error: 'Invalid synchronization request.' })
     const envelope = request as Record<string, unknown>
@@ -174,7 +177,7 @@ export class TrackerController {
         await this.api.storage.local.set({ [STORAGE_KEY]: state })
         this.last = { wall: at, mono: this.clock.monotonic(), observation: nextObservation,
           checkpoint: state.checkpointAt, tracking: statusFor(state, nextObservation) === 'Tracking' }
-        let syncReply: SyncReply | undefined
+        let syncReply: SyncPayload | undefined
         if (command.kind === 'sync-pair-request') syncReply = { kind: 'pending', requestId: command.requestId }
         if (command.kind === 'sync-claim') {
           const pair = state.pairing

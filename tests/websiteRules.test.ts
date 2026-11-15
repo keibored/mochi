@@ -102,7 +102,7 @@ test('version-3 migration preserves running, paused and completed timers and pro
     const serialized = JSON.stringify(old)
     const migrated = migratePet(old, now)!
     const preserved = { ...migrated }
-    const expected = { ...state, version: 6, websiteRules: [] }
+    const expected = { ...state, version: 7, websiteRules: [] }
     Reflect.deleteProperty(preserved, 'care')
     Reflect.deleteProperty(expected, 'care')
     assert.deepEqual(preserved, expected)

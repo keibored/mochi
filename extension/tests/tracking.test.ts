@@ -37,7 +37,7 @@ function harness(at = new Date(2026, 10, 12, 12).getTime()) {
       set: async (values) => { if (failWrite) throw new Error('Storage write failed'); raw = structuredClone(values[STORAGE_KEY]) },
     } },
     alarms: { get: async () => undefined, create: async (_name, info) => { assert.equal(info.periodInMinutes, 0.5) }, onAlarm: events.alarm },
-    runtime: { id: 'mochi-test', getURL: (path) => `chrome-extension://mochi-test/${path}`,
+    runtime: { id: 'mochi-test', getURL: (path) => `chrome-extension://mochi-test/${path}`, getManifest: () => ({ version: '0.4.0' }),
       onStartup: events.startup, onInstalled: events.installed,
       onMessage: { addListener: (listener) => { messageHandler = listener } },
       sendMessage: async () => undefined, openOptionsPage: async () => undefined },

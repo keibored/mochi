@@ -6,11 +6,11 @@ import { changeWebsiteRule } from './websiteRules.ts'
 import type { WebsiteCategory, WebsiteRule } from './websiteRules.ts'
 import { activateSync, freshWebSync, ingestSync, reserveSync } from './integration/syncDomain.ts'
 import type { SyncPairing, WebSyncState } from './integration/syncDomain.ts'
-import { accountCareTime, beginCareRest, careForManualLeisure, careForSyncedLeisure, changeLeisureAllowance, feedCare, freshCare, isCareTimestamp } from './petCare.ts'
+import { accountCareTime, beginCareRest, careForManualLeisure, careForSyncedFocus, careForSyncedLeisure, changeLeisureAllowance, feedCare, freshCare, isCareTimestamp, resetFocusEnergyPolicy } from './petCare.ts'
 import type { PetCare } from './petCare.ts'
 
 export interface PetState {
-  version: 6
+  version: 7
   adopted: boolean
   name: string
   xp: number
@@ -24,7 +24,7 @@ export interface PetState {
 }
 
 export function freshPet(now = 0): PetState {
-  return { version: 6, adopted: false, name: 'Mochi', xp: 0, foodCredits: 0, activities: [], dailyFocusGoal: DEFAULT_FOCUS_GOAL, timer: null, websiteRules: [], extensionSync: freshWebSync(), care: freshCare(now) }
+  return { version: 7, adopted: false, name: 'Mochi', xp: 0, foodCredits: 0, activities: [], dailyFocusGoal: DEFAULT_FOCUS_GOAL, timer: null, websiteRules: [], extensionSync: freshWebSync(), care: freshCare(now) }
 }
 
 export type PetAction =
@@ -48,7 +48,7 @@ export function petReducer(state: PetState, action: PetAction): PetState {
   if (action.type === 'adopt') return { ...state, adopted: true }
   if (!state.adopted) return state
   if (action.type === 'care-tick') {
-    const care = accountCareTime(state.care, state.timer, action.now)
+    const care = accountCareTime(state.care, state.timer, action.now, state.extensionSync.authorityStartedAt === null)
     return care === state.care ? state : { ...state, care }
   }
   if (action.type === 'care-allowance') {
@@ -60,14 +60,14 @@ export function petReducer(state: PetState, action: PetAction): PetState {
     if (started === state.care) return state
     const unfinished = state.timer?.runningSince !== null && state.timer !== null && completionTime(state.timer, action.now) === null
     if (unfinished && action.pauseTimerId !== state.timer?.id) return state
-    const care = accountCareTime(state.care, state.timer, action.now)
+    const care = accountCareTime(state.care, state.timer, action.now, state.extensionSync.authorityStartedAt === null)
     return { ...state, timer: unfinished ? pauseTimer(state.timer!, action.now) : state.timer,
-      care: { ...care, rest: started.rest } }
+      care: beginCareRest(care, action.id, action.now) }
   }
   if (action.type === 'care-wake') {
     if (!state.care.rest || state.care.rest.id !== action.restId || !isCareTimestamp(action.now)) return state
-    const care = accountCareTime(state.care, state.timer, action.now)
-    return { ...state, care: { ...care, rest: null } }
+    const care = accountCareTime(state.care, state.timer, action.now, state.extensionSync.authorityStartedAt === null)
+    return { ...state, care: { ...resetFocusEnergyPolicy(care, action.now), rest: null } }
   }
   if (action.type === 'sync-reserve') {
     if (state.extensionSync.authorityStartedAt === null && state.timer) return state
@@ -80,7 +80,8 @@ export function petReducer(state: PetState, action: PetAction): PetState {
   if (action.type === 'sync-ingest') {
     if (state.extensionSync.pairing?.epochId !== action.epochId) throw new RangeError('The synchronization epoch changed in another tab.')
     const result = ingestSync(state.extensionSync, action.snapshots, action.now)
-    const care = careForSyncedLeisure(state.care, state.extensionSync.summaries, result.sync.summaries)
+    const leisureCare = careForSyncedLeisure(state.care, state.extensionSync.summaries, result.sync.summaries)
+    const care = careForSyncedFocus(leisureCare, state.extensionSync.summaries, result.sync.summaries)
     return { ...state, extensionSync: result.sync, care, xp: state.xp + result.xpDelta, foodCredits: state.foodCredits + result.creditsDelta }
   }
   if (action.type === 'rule-save') {
@@ -107,7 +108,7 @@ export function petReducer(state: PetState, action: PetAction): PetState {
     if (!isCareTimestamp(action.now) || (action.type === 'timer-resume' && state.care.rest)) return state
     // A stale/premature Save must not look like a successful saved activity.
     if (action.type === 'timer-save' && completionTime(timer, action.now) === null) return state
-    const care = accountCareTime(state.care, timer, action.now)
+    const care = accountCareTime(state.care, timer, action.now, state.extensionSync.authorityStartedAt === null)
     const accounted = care === state.care ? state : { ...state, care }
     if (action.type === 'timer-cancel') return { ...accounted, timer: null, care: { ...care, timerEnergy: null } }
     if (action.type === 'timer-pause' || action.type === 'timer-resume') {
