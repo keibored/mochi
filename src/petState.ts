@@ -6,9 +6,11 @@ import { changeWebsiteRule } from './websiteRules.ts'
 import type { WebsiteCategory, WebsiteRule } from './websiteRules.ts'
 import { activateSync, freshWebSync, ingestSync, reserveSync } from './integration/syncDomain.ts'
 import type { SyncPairing, WebSyncState } from './integration/syncDomain.ts'
+import { accountCareTime, beginCareRest, careForManualLeisure, careForSyncedLeisure, changeLeisureAllowance, feedCare, freshCare, isCareTimestamp } from './petCare.ts'
+import type { PetCare } from './petCare.ts'
 
 export interface PetState {
-  version: 5
+  version: 6
   adopted: boolean
   name: string
   xp: number
@@ -18,10 +20,11 @@ export interface PetState {
   timer: TimerSession | null
   websiteRules: WebsiteRule[]
   extensionSync: WebSyncState
+  care: PetCare
 }
 
-export function freshPet(): PetState {
-  return { version: 5, adopted: false, name: 'Mochi', xp: 0, foodCredits: 0, activities: [], dailyFocusGoal: DEFAULT_FOCUS_GOAL, timer: null, websiteRules: [], extensionSync: freshWebSync() }
+export function freshPet(now = 0): PetState {
+  return { version: 6, adopted: false, name: 'Mochi', xp: 0, foodCredits: 0, activities: [], dailyFocusGoal: DEFAULT_FOCUS_GOAL, timer: null, websiteRules: [], extensionSync: freshWebSync(), care: freshCare(now) }
 }
 
 export type PetAction =
@@ -34,12 +37,38 @@ export type PetAction =
   | { type: 'sync-reserve'; pairing: Omit<SyncPairing, 'cutoffAt'> }
   | { type: 'sync-activate'; epochId: string; extensionId: string; cutoffAt: number }
   | { type: 'sync-ingest'; epochId: string; snapshots: unknown; now: number }
+  | { type: 'care-rest-start'; id: string; now: number; pauseTimerId?: string }
+  | { type: 'care-wake'; restId: string; now: number }
+  | { type: 'care-tick'; now: number }
+  | { type: 'care-allowance'; minutes: number; now: number }
   | { type: 'timer-start'; id: string; duration: number; now: number }
   | { type: 'timer-pause' | 'timer-resume' | 'timer-save' | 'timer-cancel'; id: string; now: number }
 
 export function petReducer(state: PetState, action: PetAction): PetState {
   if (action.type === 'adopt') return { ...state, adopted: true }
   if (!state.adopted) return state
+  if (action.type === 'care-tick') {
+    const care = accountCareTime(state.care, state.timer, action.now)
+    return care === state.care ? state : { ...state, care }
+  }
+  if (action.type === 'care-allowance') {
+    const care = changeLeisureAllowance(state.care, action.minutes, action.now)
+    return care === state.care ? state : { ...state, care }
+  }
+  if (action.type === 'care-rest-start') {
+    const started = beginCareRest(state.care, action.id, action.now)
+    if (started === state.care) return state
+    const unfinished = state.timer?.runningSince !== null && state.timer !== null && completionTime(state.timer, action.now) === null
+    if (unfinished && action.pauseTimerId !== state.timer?.id) return state
+    const care = accountCareTime(state.care, state.timer, action.now)
+    return { ...state, timer: unfinished ? pauseTimer(state.timer!, action.now) : state.timer,
+      care: { ...care, rest: started.rest } }
+  }
+  if (action.type === 'care-wake') {
+    if (!state.care.rest || state.care.rest.id !== action.restId || !isCareTimestamp(action.now)) return state
+    const care = accountCareTime(state.care, state.timer, action.now)
+    return { ...state, care: { ...care, rest: null } }
+  }
   if (action.type === 'sync-reserve') {
     if (state.extensionSync.authorityStartedAt === null && state.timer) return state
     return { ...state, extensionSync: reserveSync(state.extensionSync, state.activities, action.pairing) }
@@ -51,7 +80,8 @@ export function petReducer(state: PetState, action: PetAction): PetState {
   if (action.type === 'sync-ingest') {
     if (state.extensionSync.pairing?.epochId !== action.epochId) throw new RangeError('The synchronization epoch changed in another tab.')
     const result = ingestSync(state.extensionSync, action.snapshots, action.now)
-    return { ...state, extensionSync: result.sync, xp: state.xp + result.xpDelta, foodCredits: state.foodCredits + result.creditsDelta }
+    const care = careForSyncedLeisure(state.care, state.extensionSync.summaries, result.sync.summaries)
+    return { ...state, extensionSync: result.sync, care, xp: state.xp + result.xpDelta, foodCredits: state.foodCredits + result.creditsDelta }
   }
   if (action.type === 'rule-save') {
     const result = changeWebsiteRule(state.websiteRules, action.hostname, action.category, action.originalHostname)
@@ -62,35 +92,43 @@ export function petReducer(state: PetState, action: PetAction): PetState {
     return websiteRules.length === state.websiteRules.length ? state : { ...state, websiteRules }
   }
   if (action.type === 'timer-start') {
-    if (state.timer || !isTimerDuration(action.duration) || !action.id.startsWith('timer-') ||
+    if (state.timer || state.care.rest || !isTimerDuration(action.duration) || !action.id.startsWith('timer-') ||
         action.id.length <= 6 || !Number.isSafeInteger(action.now) || action.now < 0 ||
         !Number.isFinite(new Date(action.now + action.duration * 60_000).getTime()) ||
         state.activities.some((activity) => activity.id === action.id)) return state
     return { ...state, timer: { id: action.id, duration: action.duration,
-      startedAt: action.now, elapsedMs: 0, runningSince: action.now } }
+      startedAt: action.now, elapsedMs: 0, runningSince: action.now },
+    care: { ...state.care, timerEnergy: { timerId: action.id, baselineActiveMs: 0, accountedBlocks: 0 } } }
   }
   if (action.type === 'timer-pause' || action.type === 'timer-resume' ||
       action.type === 'timer-save' || action.type === 'timer-cancel') {
     const timer = state.timer
     if (!timer || timer.id !== action.id || !Number.isSafeInteger(action.now) || action.now < 0) return state
-    if (action.type === 'timer-cancel') return { ...state, timer: null }
+    if (!isCareTimestamp(action.now) || (action.type === 'timer-resume' && state.care.rest)) return state
+    // A stale/premature Save must not look like a successful saved activity.
+    if (action.type === 'timer-save' && completionTime(timer, action.now) === null) return state
+    const care = accountCareTime(state.care, timer, action.now)
+    const accounted = care === state.care ? state : { ...state, care }
+    if (action.type === 'timer-cancel') return { ...accounted, timer: null, care: { ...care, timerEnergy: null } }
     if (action.type === 'timer-pause' || action.type === 'timer-resume') {
       const next = action.type === 'timer-pause' ? pauseTimer(timer, action.now) : resumeTimer(timer, action.now)
-      return next === timer ? state : { ...state, timer: next }
+      return next === timer ? accounted : { ...accounted, timer: next }
     }
     const completedAt = completionTime(timer, action.now)
     if (completedAt === null) return state
-    const logged = petReducer(state, { type: 'log', activity: {
+    const logged = petReducer(accounted, { type: 'log', activity: {
       id: timer.id, source: 'Timer', category: 'Focus', duration: timer.duration,
       note: '', timestamp: new Date(completedAt).toISOString(),
     } })
-    return { ...logged, timer: null }
+    return { ...logged, timer: null, care: { ...logged.care, timerEnergy: null } }
   }
   if (action.type === 'goal') {
     return isValidGoal(action.minutes) ? { ...state, dailyFocusGoal: action.minutes } : state
   }
   if (action.type === 'feed') {
-    return state.foodCredits < FEED_COST ? state : { ...state, foodCredits: state.foodCredits - FEED_COST }
+    if (state.foodCredits < FEED_COST) return state
+    const care = feedCare(state.care)
+    return care === state.care ? state : { ...state, foodCredits: state.foodCredits - FEED_COST, care }
   }
   if (action.type !== 'log') return state
   const { activity } = action
@@ -101,6 +139,7 @@ export function petReducer(state: PetState, action: PetAction): PetState {
     : { xp: 0, credits: 0 }
   return {
     ...state,
+    care: state.extensionSync.authorityStartedAt === null ? careForManualLeisure(state.care, activity) : state.care,
     xp: state.xp + reward.xp,
     foodCredits: state.foodCredits + reward.credits,
     activities: [...state.activities, activity],

@@ -55,6 +55,8 @@ test('v4 migration preserves complete existing progress and active timer without
   let state = logFocus(adopted(), 30, 'manual-old', noon - 2 * 60 * 60_000)
   state = petReducer(state, { type: 'timer-start', id: 'timer-old', duration: 30, now: noon - 60 * 60_000 })
   state = petReducer(state, { type: 'timer-save', id: 'timer-old', now: noon - 30 * 60_000 })
+  // Fixture setup: three legitimate feeds can restore a pet from 40 to 100.
+  state = { ...state, care: { ...state.care, fullness: 40 } }
   for (let feed = 0; feed < 3; feed++) state = petReducer(state, { type: 'feed' })
   state = petReducer(state, { type: 'goal', minutes: 90 })
   state = petReducer(state, { type: 'rule-save', hostname: 'study.example', category: 'Focus' })
@@ -62,17 +64,21 @@ test('v4 migration preserves complete existing progress and active timer without
   state = petReducer(state, { type: 'timer-pause', id: 'timer-active', now: noon + 60_000 })
   const legacy = { ...state, version: 4 }
   Reflect.deleteProperty(legacy, 'extensionSync')
+  Reflect.deleteProperty(legacy, 'care')
   const original = JSON.stringify(legacy)
-  const migrated = migratePet(legacy)!
-  assert.equal(migrated.version, 5)
+  const migrated = migratePet(legacy, noon)!
+  assert.equal(migrated.version, 6)
   assert.deepEqual(migrated.extensionSync, freshWebSync())
-  const expected = { ...legacy, version: 5, extensionSync: freshWebSync() }
-  assert.deepEqual(migrated, expected)
+  const expected = { ...legacy, version: 6, extensionSync: freshWebSync() }
+  const preserved = { ...migrated }
+  Reflect.deleteProperty(preserved, 'care')
+  assert.deepEqual(preserved, expected)
+  assert.deepEqual([migrated.care.fullness, migrated.care.energy], [80, 80])
   assert.deepEqual([migrated.xp, migrated.foodCredits], [20, 2])
   assert.deepEqual(migrated.activities.map((entry) => entry.source), ['Manual', 'Timer'])
   assert.equal(JSON.stringify(legacy), original)
   storageFixture(legacy)
-  assert.deepEqual(readPet(), migrated)
+  assert.deepEqual(readPet(noon), migrated)
   assert.equal(savePet(migrated), true)
   assert.deepEqual(readPet(), migrated)
   assert.equal(isPetState(readPet()), true)

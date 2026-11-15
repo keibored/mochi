@@ -2,6 +2,8 @@
 
 This Manifest V3 extension estimates active HTTP(S) website time locally and shows a popup report. After explicit approval, it sends category/time summaries to the Mochi dashboard at **`http://localhost:5173`**, where validated ingestion awards Focus rewards. There are no accounts, backend, analytics, content scripts, or remote sync service. Extension category rules stay separate from dashboard rules.
 
+The main web app now uses those validated deltas to care for a virtual bunny. Its version-6 care ledger preserves existing progress and avoids retroactive or duplicate effects; see [the care model](../docs/pet-care.md). This increment does not change the extension's version-2 storage, version-2 summary DTO, permissions, or classification rules.
+
 ## Rebuild and reload the existing installation
 
 From `C:\Users\keish\OneDrive\Documents\mochi`, using Node.js 24 and PowerShell:

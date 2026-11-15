@@ -9,9 +9,11 @@ interface Props {
   dispatch: (action: PetAction) => Promise<boolean>
   canPersist: boolean
   busy: boolean
+  resting?: boolean
+  onWake?: () => void
 }
 
-export function FocusTimer({ session, dispatch, canPersist, busy }: Props) {
+export function FocusTimer({ session, dispatch, canPersist, busy, resting = false, onWake }: Props) {
   const [duration, setDuration] = useState(String(DEFAULT_TIMER_MINUTES))
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
@@ -65,6 +67,7 @@ export function FocusTimer({ session, dispatch, canPersist, busy }: Props) {
     <section className="panel timer-card" aria-labelledby="timer-heading">
       <h2 id="timer-heading" tabIndex={-1}>Focus timer</h2>
       <p id="timer-help" className="help-text">An optional elapsed-time session, not verified activity.</p>
+      {resting && <div className="focus-rest-notice"><p>Mochi is resting. Wake Mochi before starting or resuming Focus.</p>{onWake && <button className="adopt-button secondary-button" type="button" disabled={busy || !canPersist} onClick={onWake}>Wake Mochi</button>}</div>}
       <p className="timer-countdown" role="timer" aria-label="Time remaining" aria-live="off">{display}</p>
       <p className="timer-status" role="status" aria-live="polite" aria-atomic="true">{stateLabel || feedback || 'Ready for a little focus?'}</p>
       {!session ? (
@@ -75,12 +78,12 @@ export function FocusTimer({ session, dispatch, canPersist, busy }: Props) {
             aria-invalid={Boolean(error)} aria-describedby={`timer-help timer-range${error ? ' timer-error' : ''}`} />
           <p id="timer-range" className="help-text">1–120 whole minutes.</p>
           {error && <p id="timer-error" className="field-error" role="alert">{error}</p>}
-          <button className="adopt-button" type="submit" disabled={busy || !canPersist}>Start</button>
+          <button className="adopt-button" type="submit" disabled={busy || !canPersist || resting}>Start</button>
         </form>
       ) : (
         <div className="timer-controls">
           {completed ? <button className="adopt-button" type="button" disabled={busy || !canPersist} onClick={() => void act('timer-save')}>Save session</button>
-            : <button className="adopt-button" type="button" disabled={busy || !canPersist}
+            : <button className="adopt-button" type="button" disabled={busy || !canPersist || resting}
               onClick={() => void act(session.runningSince === null ? 'timer-resume' : 'timer-pause')}>
               {session.runningSince === null ? 'Resume' : 'Pause'}
             </button>}
