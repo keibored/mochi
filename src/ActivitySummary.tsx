@@ -1,21 +1,17 @@
 import { ACTIVITY_CATEGORIES } from './rewards'
 import { browserSummary, dashboardSummary, focusBaselineForDate, formatMinutes } from './integration/activityView'
 import type { PetState } from './petState'
-import type { RecentActivity } from './integration/activityView'
 import { AppIcon } from './AppIcon'
-import { ActivityHistory } from './ActivityHistory'
 
 const categoryIcon = { Focus: 'focus', Leisure: 'leisure', Rest: 'rest', Neutral: 'neutral' } as const
 
 interface Props {
   pet: PetState
   today: Date
-  recentActivities: readonly RecentActivity[]
   onAdjustGoal: () => void
-  onViewAll: () => void
 }
 
-export function ActivitySummary({ pet, today, recentActivities, onAdjustGoal, onViewAll }: Props) {
+export function ActivitySummary({ pet, today, onAdjustGoal }: Props) {
   const authoritative = pet.extensionSync.authorityStartedAt !== null
   const saved = dashboardSummary(pet.activities, pet.extensionSync, today)
   const browser = browserSummary(pet.extensionSync, today)
@@ -41,10 +37,6 @@ export function ActivitySummary({ pet, today, recentActivities, onAdjustGoal, on
         <progress id="goal-progress" max={pet.dailyFocusGoal} value={Math.min(saved.Focus, pet.dailyFocusGoal)} />
         {saved.Focus >= pet.dailyFocusGoal && <p className="goal-complete">Your focus goal is complete. Make room for a little rest ♡</p>}
         {authoritative && earlierFocus > 0 && <p className="help-text">Includes {formatMinutes(earlierFocus)} Focus minutes saved before tracking was connected.</p>}
-      </section>
-      <section className="overview-recent" aria-labelledby="recent-heading">
-        <div className="section-heading"><h3 id="recent-heading">Recent activities</h3><button className="text-button" type="button" onClick={onViewAll}>View all <AppIcon name="arrow" /></button></div>
-        <ActivityHistory activities={recentActivities} compact />
       </section>
     </section>
   )

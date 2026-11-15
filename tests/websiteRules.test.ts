@@ -98,9 +98,15 @@ test('version-3 migration preserves running, paused and completed timers and pro
   for (const state of [base, paused]) {
     const old = { ...state, version: 3 }
     Reflect.deleteProperty(old, 'websiteRules')
+    Reflect.deleteProperty(old, 'care')
     const serialized = JSON.stringify(old)
-    const migrated = migratePet(old)
-    assert.deepEqual(migrated, { ...state, version: 5, websiteRules: [] })
+    const migrated = migratePet(old, now)!
+    const preserved = { ...migrated }
+    const expected = { ...state, version: 6, websiteRules: [] }
+    Reflect.deleteProperty(preserved, 'care')
+    Reflect.deleteProperty(expected, 'care')
+    assert.deepEqual(preserved, expected)
+    assert.deepEqual([migrated.care.fullness, migrated.care.energy], [80, 80])
     assert.equal(JSON.stringify(old), serialized)
     storageFixture(old)
     assert.equal(savePet(migrated!), true)
@@ -109,6 +115,7 @@ test('version-3 migration preserves running, paused and completed timers and pro
   // A timer can finish while closed; migration keeps its deadline untouched.
   const legacy = { ...base, version: 3 }
   Reflect.deleteProperty(legacy, 'websiteRules')
+  Reflect.deleteProperty(legacy, 'care')
   const migrated = migratePet(legacy)!
   const saved = petReducer(migrated, { type: 'timer-save', id: 'timer-active', now: now + 60 * 60_000 })
   assert.equal(saved.activities.at(-1)?.source, 'Timer')

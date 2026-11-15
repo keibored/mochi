@@ -11,8 +11,9 @@ import type { ActivityCategory } from './rewards'
 import { recentActivityView } from './integration/activityView'
 import { ActivityHistory } from './ActivityHistory'
 import { ActivitySummary } from './ActivitySummary'
-import { PetCard } from './PetCard'
-import type { PetReaction } from './PetCard'
+import { PetScene } from './PetScene'
+import { CareSettings } from './CareSettings'
+import { completionTime } from './timer'
 import { MochiBunny } from './MochiBunny'
 import { AppIcon } from './AppIcon'
 import './App.css'
@@ -21,7 +22,7 @@ type View = 'Home' | 'Activity' | 'Settings'
 const navigation = [{ name: 'Home', icon: 'home' }, { name: 'Activity', icon: 'activity' }, { name: 'Settings', icon: 'settings' }] as const
 
 function App() {
-  const { pet, dispatch, commitSync, storageNotice, canPersist, busy } = useProgress()
+  const { pet, dispatch, commitSync, storageNotice, canPersist, rewardNotice, busy } = useProgress()
   // One controller stays active across views; presentational cards share it.
   const sync = useExtensionSync({ pet, commitSync, canPersist })
   const [view, setView] = useState<View>('Home')
@@ -33,7 +34,8 @@ function App() {
   const [goalError, setGoalError] = useState('')
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
-  const [reaction, setReaction] = useState<PetReaction | null>(null)
+  const [feedingId, setFeedingId] = useState<number | null>(null)
+  const [restConfirmTimerId, setRestConfirmTimerId] = useState<string | null>(null)
   const [today, setToday] = useState(() => new Date())
   const [historyLimit, setHistoryLimit] = useState(20)
 
@@ -53,10 +55,10 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!reaction) return
-    const timeout = window.setTimeout(() => setReaction(null), 4000)
+    if (feedingId === null) return
+    const timeout = window.setTimeout(() => setFeedingId(null), 4000)
     return () => window.clearTimeout(timeout)
-  }, [reaction])
+  }, [feedingId])
 
   function navigate(next: View, focusTimer = false) {
     setView(next)
@@ -81,12 +83,10 @@ function App() {
     setError('')
     const messages = {
       Focus: 'Every little step counts ♡',
-      Rest: 'Mochi is settling in for a cozy little rest with you.',
+      Rest: 'A cozy break, recorded. Use Rest on Home for energy recovery.',
       Leisure: 'A little fun belongs in your day, too.',
       Neutral: 'Your time has been recorded.',
     }
-    setReaction({ mood: category === 'Rest' ? 'Feeling sleepy and cozy ♡' : category === 'Focus' ? 'Feeling encouraged ♡' : 'Feeling cozy.',
-      expression: category === 'Rest' ? 'sleepy' : category === 'Focus' || category === 'Leisure' ? 'happy' : null })
     setFeedback(`${minutes} ${category.toLowerCase()} minutes saved. ${messages[category]}`)
   }
 
@@ -104,11 +104,33 @@ function App() {
   }
 
   async function feed() {
-    if (pet.foodCredits < FEED_COST) return
+    if (pet.foodCredits < FEED_COST || pet.care.fullness >= 100) return
     const changed = await dispatch({ type: 'feed' })
-    if (!changed) { setFeedback('Mochi needs 2 available food credits for a treat.'); return }
-    setReaction({ mood: 'Feeling happy ♡', expression: 'happy' })
-    setFeedback('Yum! Mochi loved that little treat ♡')
+    if (!changed) { setFeedback('Mochi is full for now, or those credits changed in another tab.'); return }
+    setFeedingId((previous) => (previous ?? 0) + 1)
+    setFeedback('Yum! A snack restored up to 20 fullness ♡')
+  }
+
+  async function startRest(pauseTimerId?: string) {
+    const changed = await dispatch({ type: 'care-rest-start', id: `rest-${crypto.randomUUID()}`, now: Date.now(), ...(pauseTimerId ? { pauseTimerId } : {}) })
+    setRestConfirmTimerId(null)
+    setFeedback(changed ? 'Mochi is resting. Each completed 5 minutes restores 5 energy.' : 'Rest did not start. Your timer or care state may have changed in another tab.')
+    window.requestAnimationFrame(() => document.getElementById('scene-rest-action')?.focus())
+  }
+
+  function requestRest() {
+    if (pet.timer && pet.timer.runningSince !== null && completionTime(pet.timer, Date.now()) === null) {
+      setRestConfirmTimerId(pet.timer.id)
+      window.requestAnimationFrame(() => document.getElementById('rest-confirm-action')?.focus())
+      return
+    }
+    void startRest()
+  }
+
+  async function wake() {
+    if (!pet.care.rest) return
+    const changed = await dispatch({ type: 'care-wake', restId: pet.care.rest.id, now: Date.now() })
+    setFeedback(changed ? pet.timer?.runningSince === null ? 'Mochi is awake. Resume your timer whenever you’re ready.' : 'Mochi is awake. One little step at a time.' : 'No change was saved. Review storage and the current care state.')
   }
 
   const history = recentActivityView(pet.activities, pet.extensionSync, historyLimit + 1)
@@ -148,22 +170,23 @@ function App() {
             <HomeTrackingStatus pet={pet} sync={sync} openSettings={() => navigate('Settings')} />
           </div>
           {pet.timer && <div className="home-context-row"><ActiveTimerNotice session={pet.timer} compact openTools={() => navigate('Activity', true)} /></div>}
-          <div className="home-grid">
-            <PetCard pet={pet} reaction={reaction} busy={busy} onFeed={() => void feed()} />
-            <ActivitySummary pet={pet} today={today} recentActivities={history.slice(0, 3)} onAdjustGoal={() => navigate('Settings')} onViewAll={() => navigate('Activity')} />
-          </div>
+          <PetScene pet={pet} today={today} busy={busy} canPersist={canPersist} feedingId={feedingId} reward={rewardNotice} confirmRest={restConfirmTimerId !== null}
+            onFeed={() => void feed()} onRest={requestRest} onWake={() => void wake()} onFocus={() => navigate('Activity', true)}
+            onConfirmRest={() => void startRest(restConfirmTimerId ?? undefined)} onCancelRest={() => { setRestConfirmTimerId(null); document.getElementById('scene-rest-action')?.focus() }} />
         </section>
 
         <section id="activity-view" className="app-view" hidden={view !== 'Activity'} aria-labelledby="activity-heading">
           <div className="view-heading"><h1 id="activity-heading" tabIndex={-1}>Activity</h1><p>Your recorded time and optional tools.</p></div>
+          <div className="activity-overview"><ActivitySummary pet={pet} today={today} onAdjustGoal={() => navigate('Settings')} /></div>
           <section className="panel history-card" aria-labelledby="history-heading"><div className="section-heading"><h2 id="history-heading">Activity history</h2><span className="day-label">Newest first</span></div><p className="help-text history-help">Browser summaries, Manual entries, and Timer sessions keep their source labels. Records can overlap; this list is not a combined time total.</p><ActivityHistory activities={history.slice(0, historyLimit)} />{history.length > historyLimit && <button className="adopt-button secondary-button" type="button" onClick={() => setHistoryLimit((limit) => limit + 20)}>Show more activities</button>}</section>
           <div className="optional-tools-intro"><h2>Other ways to record time</h2></div>
           {browserAuthoritative && <p className="optional-tools-notice">Manual and timer entries stay in history without extra Focus rewards or goal progress, even while disconnected. Manual Rest still counts.</p>}
           <div className="tools-grid">
-            <FocusTimer session={pet.timer} dispatch={dispatch} canPersist={canPersist} busy={busy} />
+            <FocusTimer session={pet.timer} dispatch={dispatch} canPersist={canPersist} busy={busy} resting={pet.care.rest !== null} onWake={() => void wake()} />
             <section className="panel focus-card" aria-labelledby="manual-heading">
               <div className="card-heading"><h2 id="manual-heading">Log an activity</h2><span className="source-badge">Manual</span></div>
               <p className="help-text">Log time you have already spent.</p>
+              {category === 'Rest' && <p className="help-text">This records history. Use Rest on Home for Mochi’s energy recovery.</p>}
               <form onSubmit={logActivity} noValidate>
                 <div className="form-row"><div><label htmlFor="activity-category">Category</label><select id="activity-category" value={category} onChange={(event) => { if (isActivityCategory(event.target.value)) setCategory(event.target.value) }}>{ACTIVITY_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
                   <div><label htmlFor="focus-duration">Minutes</label><input id="focus-duration" type="number" inputMode="numeric" min="1" max="240" step="1" value={duration} onChange={(event) => { setDuration(event.target.value); setError('') }} aria-invalid={Boolean(error)} aria-describedby={`duration-help${error ? ' duration-error' : ''}`} /></div></div>
@@ -197,6 +220,7 @@ function App() {
             </section>
             <ExtensionConnection pet={pet} sync={sync} canPersist={canPersist} />
             <WebsiteRulesSettings rules={pet.websiteRules} dispatch={dispatch} busy={busy} canPersist={canPersist} />
+            <CareSettings allowance={pet.care.dailyLeisureAllowance} busy={busy} canPersist={canPersist} dispatch={dispatch} />
           </div>
         </section>
       </main>

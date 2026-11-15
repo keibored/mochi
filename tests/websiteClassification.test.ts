@@ -91,12 +91,14 @@ test('existing saved rules remain exact overrides through web migration with pro
   pet = petReducer(pet, { type: 'rule-save', hostname: 'developer.mozilla.org', category: 'Leisure' })
   const previous = { ...pet, version: 4 }
   Reflect.deleteProperty(previous, 'extensionSync')
+  Reflect.deleteProperty(previous, 'care')
   const original = JSON.stringify(previous)
   const migrated = migratePet(previous)!
   assert.equal(JSON.stringify(previous), original)
   assert.deepEqual(migrated.websiteRules, pet.websiteRules)
   assert.deepEqual(migrated.activities, pet.activities)
   assert.deepEqual([migrated.xp, migrated.foodCredits, migrated.adopted], [10, 2, true])
+  assert.deepEqual([migrated.care.fullness, migrated.care.energy], [80, 80])
   assert.equal(categoryForHostname(migrated.websiteRules, 'developer.mozilla.org'), 'Leisure')
   assert.equal(classificationForHostname(migrated.websiteRules, 'developer.mozilla.org').origin, 'Your override')
 })

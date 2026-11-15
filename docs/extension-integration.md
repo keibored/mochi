@@ -22,7 +22,7 @@ Same-epoch explicit reapproval rotates the token while keeping the original cuto
 
 Live state is ephemeral and becomes unverified after an error, when the app is hidden, or when its verified response is older than **15 seconds**. Last successful sync is historical, not evidence of a currently running tracker. Stored pairings, activity, rules, or a user-controlled toggle never establish connection status.
 
-The redesigned Home status card and Settings connection form consume one shared sync controller mounted at the app level. Switching views does not stop syncing or start a second receiver. The privacy boundary is unchanged: current hostname/category/origin details stay in the extension popup. Home shows browser category totals and intentional manual Rest separately; the daily focus goal retains the captured pre-connection Focus baseline. Activity history keeps source labels and does not claim a summed total for potentially overlapping records.
+The Home connection indicator and Settings form consume one shared sync controller mounted at the app level. Switching views does not stop syncing or start a second receiver. The privacy boundary is unchanged: current hostname/category/origin details stay in the extension popup. Detailed category totals, goal, and history now live in Activity with source labels and no misleading combined time total; Home is the care room.
 
 ## Transport and validation boundary
 
@@ -77,7 +77,9 @@ Manual entries describe self-reported minutes, not reliable start/end intervals.
 
 The first durable reservation captures **all already-saved Focus activities** as the baseline, including equality at the reservation millisecond or timestamps affected by clock changes. The initial active timer must be resolved by the user first. Extension acceptance begins no earlier than its activated cutoff; the short reserve-to-activate gap is not backfilled.
 
-Reward calculations use the captured Focus baseline plus accepted extension Focus milliseconds per original local date. They award only the difference in completed **15-minute blocks**, at **5 XP and 2 credits** each, capped at **240 Focus minutes/day**, including the baseline. Millisecond remainders carry across revisions and summaries without rounding. Leisure and Neutral grant no rewards and never subtract them. Feeding still subtracts exactly 2 credits without changing XP.
+Reward calculations use the captured Focus baseline plus accepted extension Focus milliseconds per original local date. They award only the difference in completed **15-minute blocks**, at **5 XP and 2 credits** each, capped at **240 Focus minutes/day**, including the baseline. Millisecond remainders carry across revisions and summaries without rounding. Leisure and Neutral grant no rewards and never subtract XP/credits. Feeding costs 2 credits without changing XP, restores 20 fullness, and is a no-op when full.
+
+The version-6 care layer compares the old and new **validated accepted** Leisure ledger in that same locked transaction. Only new eligible excess milliseconds can use fullness; retries and old revisions cannot replay them. The per-day allowance/carry, prospective policy cutoffs, migration baselines, intentional Rest, and Focus energy cursors are documented in [pet-care.md](pet-care.md). Optional records after browser authority are not an additional Leisure source. No idle, Neutral, disconnected wall-clock gap, or unseen activity is invented into a care loss. The sync DTO, approval, privacy validation, and existing XP rate/cap are unchanged.
 
 Once authority is reserved, Manual and Timer entries remain available and save accurately labeled history, but cannot add extra Focus rewards or inflate primary Focus goal progress. The dashboard's primary Focus total is the captured baseline plus accepted browser Focus. Other primary category totals combine earlier saved entries with synced categories; intentional manual Rest continues to count. Goal edits never recalculate rewards.
 
@@ -85,7 +87,7 @@ Pause, disconnect, missing messages, and buffered activity **never switch reward
 
 ## Persistence, compatibility, and rule ownership
 
-The web record migrates from version 4 to **version 5** under `mochi.progress`, preserving adoption, XP, spent credits, activities/IDs/timestamps/notes/source labels, goals, rules, and the entire timer session. Older supported versions still use their structural migrations. The new fields hold pairing, authority/baseline, accepted summaries, and last successful sync. Migration never imports extension time or replays rewards.
+The web record is now **version 6** under `mochi.progress`. Versions 1–5 migrate preserving adoption, XP, spent credits, activities/IDs/timestamps/notes/source labels, goals, rules, the entire timer, and sync pairing/ledger/baseline. Care starts at 80 fullness/80 energy with historical activity and active timer time baselined. The first locked care reconciliation durably commits migration even if no gameplay value changes; read-only loading/rendering does not write. Migration never imports extra extension time, charges historical care, or replays rewards.
 
 Extension state migrates from version 1 to **version 2** under the unchanged `mochi.extension.v1` key. Existing enable/pause preferences, rules, aggregates, event IDs, and checkpoint survive. Older extension aggregates stay local until retention; first activation cannot retroactively reward them.
 

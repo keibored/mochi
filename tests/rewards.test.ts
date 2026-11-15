@@ -64,14 +64,15 @@ test('adoption, logging and repeated feeds use immutable updates and never negat
   assert.deepEqual([fed.xp, fed.foodCredits], [10, 2])
   let repeated = fed
   for (let click = 0; click < 20; click++) repeated = petReducer(repeated, { type: 'feed' })
-  assert.deepEqual([repeated.xp, repeated.foodCredits], [10, 0])
+  assert.deepEqual([repeated.xp, repeated.foodCredits], [10, 2], 'a full pet does not spend more credits')
+  assert.equal(repeated.care.fullness, 100)
   assert.equal(petReducer(logged, { type: 'log', activity: entry(30) }), logged)
 })
 
 test('saved record validates activity IDs, durations, timestamps and balances', () => {
   const valid = { ...freshPet(), adopted: true, activities: [entry(30)], xp: 10, foodCredits: 2 }
   assert.equal(isPetState(valid), true)
-  for (const invalid of [null, {}, { ...valid, version: 6 }, { ...valid, foodCredits: -1 },
+  for (const invalid of [null, {}, { ...valid, version: 7 }, { ...valid, foodCredits: -1 },
     { ...valid, xp: 1.5 }, { ...valid, activities: [entry(0)] },
     { ...valid, activities: [entry(30), entry(30)] },
     { ...valid, activities: [{ ...entry(30), timestamp: 'invalid' }] },
@@ -82,7 +83,8 @@ test('saved record validates activity IDs, durations, timestamps and balances', 
   }
 })
 
-test('storage round trip preserves adoption, activities, XP and spent credits', () => {
+test('storage round trip preserves adoption, activities, XP and spent credits', (t) => {
+  t.mock.method(Date, 'now', () => noon.getTime())
   const records = new Map<string, string>()
   Object.defineProperty(globalThis, 'window', { configurable: true, value: {
     localStorage: {
@@ -95,7 +97,7 @@ test('storage round trip preserves adoption, activities, XP and spent credits', 
   assert.equal(savePet(saved), true)
   assert.deepEqual(loadPet().pet, saved)
   records.set(STORAGE_KEY, '{broken')
-  assert.deepEqual(loadPet().pet, freshPet())
+  assert.deepEqual(loadPet().pet, freshPet(noon.getTime()))
   assert.match(loadPet().notice, /could not be read/)
   assert.equal(savePet(freshPet()), false)
   assert.equal(records.get(STORAGE_KEY), '{broken', 'unreadable progress must not be overwritten')
@@ -140,7 +142,7 @@ test('version-1 migration preserves progress without replaying rewards', () => {
   const legacy = { version: 1, adopted: true, name: 'Mochi', xp: 10, foodCredits: 2, activities: [legacyEntry] }
   const snapshot = JSON.stringify(legacy)
   const migrated = migratePet(legacy)!
-  assert.equal(migrated.version, 5)
+  assert.equal(migrated.version, 6)
   assert.equal(migrated.timer, null)
   assert.equal(migrated.dailyFocusGoal, 60)
   assert.equal(migrated.adopted, true)
@@ -166,7 +168,7 @@ test('migration through storage retains spent credits and writes the updated ver
   assert.equal(savePet(loaded.pet), true)
   assert.deepEqual(loadPet().pet, loaded.pet)
   assert.deepEqual([loadPet().pet.xp, loadPet().pet.foodCredits], [10, 2])
-  assert.equal(JSON.parse(raw).version, 5)
+  assert.equal(JSON.parse(raw).version, 6)
 })
 
 test('daily category summaries switch at local midnight', () => {
@@ -178,11 +180,12 @@ test('daily category summaries switch at local midnight', () => {
   assert.deepEqual(dailySummary(activities, after), { Focus: 15, Leisure: 30, Rest: 0, Neutral: 5 })
 })
 
-test('unavailable storage does not crash', () => {
+test('unavailable storage does not crash', (t) => {
+  t.mock.method(Date, 'now', () => noon.getTime())
   Object.defineProperty(globalThis, 'window', { configurable: true, value: {
     get localStorage() { throw new Error('Storage unavailable') },
   } })
   assert.equal(savePet(freshPet()), false)
-  assert.deepEqual(loadPet().pet, freshPet())
+  assert.deepEqual(loadPet().pet, freshPet(noon.getTime()))
   assert.match(loadPet().notice, /cannot be saved/)
 })
