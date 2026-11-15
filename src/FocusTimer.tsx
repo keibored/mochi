@@ -3,6 +3,8 @@ import type { FormEvent } from 'react'
 import type { PetAction } from './petState'
 import { completionTime, DEFAULT_TIMER_MINUTES, isTimerDuration, MAX_TIMER_MINUTES, MIN_TIMER_MINUTES, remainingMs } from './timer'
 import type { TimerSession } from './timer'
+import { timerPresentation } from './timerPresentation'
+import { useTransientFeedback } from './useTransientFeedback'
 
 interface Props {
   session: TimerSession | null
@@ -11,12 +13,13 @@ interface Props {
   busy: boolean
   resting?: boolean
   onWake?: () => void
+  energyFromBrowser?: boolean
 }
 
-export function FocusTimer({ session, dispatch, canPersist, busy, resting = false, onWake }: Props) {
+export function FocusTimer({ session, dispatch, canPersist, busy, resting = false, onWake, energyFromBrowser = false }: Props) {
   const [duration, setDuration] = useState(String(DEFAULT_TIMER_MINUTES))
   const [error, setError] = useState('')
-  const [feedback, setFeedback] = useState('')
+  const [feedback, setFeedback] = useTransientFeedback()
   const [now, setNow] = useState(Date.now)
   const [cancelId, setCancelId] = useState<string | null>(null)
 
@@ -34,7 +37,7 @@ export function FocusTimer({ session, dispatch, canPersist, busy, resting = fals
 
   // Only this short state label is live; the countdown is never announced.
   const completed = session !== null && completionTime(session, now) !== null
-  const stateLabel = session ? (completed ? 'Focus session complete ♡' : session.runningSince === null ? 'Focus timer paused.' : 'Focus timer running.') : ''
+  const stateLabel = session ? timerPresentation(session, now).label : ''
   const seconds = session ? Math.ceil(remainingMs(session, now) / 1000) : Number(duration) * 60
   const display = Number.isFinite(seconds) && seconds >= 0
     ? `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}` : '00:00'
@@ -107,6 +110,7 @@ export function FocusTimer({ session, dispatch, canPersist, busy, resting = fals
         <summary>About this timer</summary>
         <p>A running timer continues while the page is closed. Paused time does not count. Complete a session, then save it to your activity history.</p>
         <p>Sessions use the local date they finished, even if saved later. Only one timer can be active across your Mochi tabs.</p>
+        <p>{energyFromBrowser ? 'Browser Focus owns energy accounting after the first connection. This optional timer does not deduct energy again, including while tracking is paused or disconnected.' : 'Active timer time uses 1 energy per completed 5 minutes; paused time does not count.'}</p>
       </details>
     </section>
   )

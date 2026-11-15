@@ -14,6 +14,9 @@ function connectionStatus(pet: PetState, sync: ConnectionProps['sync']) {
   if (sync.connected) return sync.liveStatus ?? 'Checking connection'
   if (sync.pending) return 'Approval needed'
   if (sync.requesting) return 'Requesting approval'
+  if (sync.errorCode === 'incompatible') return 'Extension update needed'
+  if (sync.errorCode === 'wrong-origin') return 'Wrong app address'
+  if ((sync.errorCode === 'unavailable' || sync.errorCode === 'timeout') && !pet.extensionSync.pairing) return 'Extension unavailable'
   if (pet.extensionSync.pairing) {
     // The hook's only non-error notice is its successful approval message.
     const issue = sync.notice && sync.notice !== 'Connection approved. Browser activity is now syncing automatically.'
@@ -32,6 +35,9 @@ function statusGuidance(status: string) {
     case 'No supported website': return 'Open an HTTP(S) website in Brave to record time.'
     case 'Approval needed': return 'Approve the connection in Mochi’s Brave popup.'
     case 'Requesting approval': return 'Requesting permission from your extension…'
+    case 'Extension update needed': return 'Rebuild and reload Mochi’s extension to match this dashboard.'
+    case 'Wrong app address': return `Connect from ${APP_ORIGIN}/ in Brave.`
+    case 'Extension unavailable': return 'Check Mochi’s extension ID and reload it in this Brave profile.'
     case 'Connection lost': return 'Your saved progress is safe. Review your connection.'
     case 'Checking connection': return 'Verifying your connection with Brave…'
     default: return 'Bring your browser activity into Mochi.'
@@ -98,6 +104,7 @@ export function ExtensionConnection({ pet, canPersist, sync }: ConnectionProps) 
       </div>
       <p className="tracking-summary">{statusGuidance(status)}</p>
       <LastSync pet={pet} />
+      {sync.extensionInfo && <p className="help-text">Verified extension {sync.extensionInfo.version} · catalog {sync.extensionInfo.catalogVersion}. Automatic classification and revisioned sync are supported.</p>}
       {!sync.connected && (
         <form className="extension-connection-form" onSubmit={requestConnection} noValidate>
           <label htmlFor="extension-id">Mochi extension ID</label>
@@ -111,7 +118,7 @@ export function ExtensionConnection({ pet, canPersist, sync }: ConnectionProps) 
               {sync.pending ? 'Waiting for approval…' : sync.requesting ? 'Requesting…' : pet.extensionSync.pairing ? 'Reconnect in Brave' : 'Connect in Brave'}
             </button>
           </div>
-          {!originAllowed && <p className="field-error">Open this app at {APP_ORIGIN} to connect.</p>}
+          {!originAllowed && <p className="field-error">Open this app at {APP_ORIGIN}/ in Brave to connect. Other origins and ports are not allowed.</p>}
           {!canPersist && <p className="help-text">Local storage and safe sharing between tabs must be available to connect.</p>}
           {!authorityStarted && pet.timer && <p className="help-text">Save or cancel your active timer before first connecting.</p>}
         </form>

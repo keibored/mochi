@@ -2,7 +2,7 @@
 
 This Manifest V3 extension estimates active HTTP(S) website time locally and shows a popup report. After explicit approval, it sends category/time summaries to the Mochi dashboard at **`http://localhost:5173`**, where validated ingestion awards Focus rewards. There are no accounts, backend, analytics, content scripts, or remote sync service. Extension category rules stay separate from dashboard rules.
 
-The main web app now uses those validated deltas to care for a virtual bunny. Its version-6 care ledger preserves existing progress and avoids retroactive or duplicate effects; see [the care model](../docs/pet-care.md). This increment does not change the extension's version-2 storage, version-2 summary DTO, permissions, or classification rules.
+The main web app uses those validated deltas to care for a virtual bunny. Its version-7 care ledger preserves existing progress and avoids retroactive or duplicate effects, including automatic Focus energy; see [the care model](../docs/pet-care.md). Extension **0.4.0** adds protocol-2 receiver/build diagnostics. It preserves version-2 storage, the version-2 summary DTO, permissions, approval tokens, and classification rules. Reload the existing installation to retain its rules and preferences.
 
 ## Rebuild and reload the existing installation
 
@@ -30,7 +30,7 @@ For an initial installation only, choose **Load unpacked** and select the folder
 
 Classification works without adding rules: the shared bundled catalog supplies conservative website defaults. The popup shows the current category and **Automatic**, **Your override**, or **Unclassified**. Unknown and mixed-purpose sites remain Neutral; they still accumulate time. Categories estimate a website's usual purpose rather than proving intent.
 
-**Adjust website categories** opens optional extension overrides. An exact-hostname override wins over automatic classification, including an explicit Neutral override. Removing it restores the most specific bundled default or Unclassified Neutral. Existing saved rules remain overrides; web-app overrides are preserved separately and are not copied into the extension. See [catalog rationale, matching rules, and maintenance](../docs/website-classification.md). Version **0.3.0** changes classification, not the storage schema or sync protocol.
+**Adjust website categories** opens optional extension overrides. An exact-hostname override wins over automatic classification, including an explicit Neutral override. Removing it restores the most specific bundled default or Unclassified Neutral. Existing saved rules remain overrides; web-app overrides are preserved separately and are not copied into the extension. See [catalog rationale, matching rules, and maintenance](../docs/website-classification.md). Version **0.4.0** reports the actual manifest version, shared catalog revision, and sync capabilities to the approved dashboard transport; Settings can confirm the running receiver rather than guessing from saved data.
 
 Normal dashboard refresh automatically reuses the saved token. If reconnection is needed, use the exact origin and the same installation's ID, then approve again. Same-epoch reapproval rotates the token without resetting its cutoff or buffer. There is no need to clear browser data.
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useEffectEvent, useState } from 'react'
 import type { PetAction, PetState } from './petState'
-import { callExtension } from './integration/extensionTransport'
-import type { SyncReply } from './integration/extensionTransport'
+import { callExtension, ExtensionConnectionError } from './integration/extensionTransport'
+import type { ExtensionBuildInfo, ExtensionErrorCode, SyncReply } from './integration/extensionTransport'
 import { APP_ORIGIN } from './integration/localConfig'
 
 type Snapshot = Extract<SyncReply, { kind: 'snapshot' }>
@@ -22,6 +22,8 @@ export function useExtensionSync({ pet, canPersist, commitSync }: ExtensionSyncP
   const [pending, setPending] = useState<PendingConnection | null>(null)
   const [requesting, setRequesting] = useState(false)
   const [notice, setNotice] = useState('')
+  const [errorCode, setErrorCode] = useState<ExtensionErrorCode | null>(null)
+  const [verifiedInfo, setVerifiedInfo] = useState<ExtensionBuildInfo | null>(null)
   const [live, setLive] = useState<LiveConnection | null>(null)
   const pairing = pet.extensionSync.pairing
 
@@ -34,11 +36,11 @@ export function useExtensionSync({ pet, canPersist, commitSync }: ExtensionSyncP
     const saved = await commitSync({ type: 'sync-ingest', epochId: snapshot.epochId, snapshots: snapshot.summaries, now })
     if (saved.pet.extensionSync.pairing?.epochId !== snapshot.epochId || saved.pet.extensionSync.lastSuccessfulSyncAt === null ||
         saved.pet.extensionSync.lastSuccessfulSyncAt < now) throw new Error('This synchronization could not be saved. Your previous progress is preserved.')
-    return { epochId: snapshot.epochId, status: snapshot.liveStatus, receivedAt: Date.now() }
+    return { epochId: snapshot.epochId, status: snapshot.liveStatus, receivedAt: Date.now(), extensionInfo: snapshot.extensionInfo }
   }, [commitSync])
 
   const finishApproval = useEffectEvent(async (approval: Approval) => {
-    if (!canPersist) throw new Error('Available local storage is required before connecting. Existing progress is preserved.')
+    if (!canPersist) throw new ExtensionConnectionError('storage', 'Available local storage is required before connecting. Existing progress is preserved.')
     if (approval.origin !== APP_ORIGIN) throw new Error('The approved origin does not match this app.')
     const previous = pet.extensionSync.pairing
     const reservedAt = previous?.epochId === approval.epochId && previous.extensionId === approval.extensionId
@@ -59,20 +61,23 @@ export function useExtensionSync({ pet, canPersist, commitSync }: ExtensionSyncP
   async function connect(extensionId: string) {
     if (requesting || pending) return
     setNotice('')
-    if (window.location.origin !== APP_ORIGIN) { setNotice(`Open Mochi at ${APP_ORIGIN} to connect. This exact origin is required.`); return }
-    if (!/^[a-p]{32}$/.test(extensionId)) { setNotice('Copy the 32-letter Mochi extension ID from brave://extensions.'); return }
-    if (!canPersist) { setNotice('The connection needs available local storage and safe sharing between tabs.'); return }
+    setErrorCode(null)
+    if (window.location.origin !== APP_ORIGIN) { setNotice(`Open Mochi at ${APP_ORIGIN}/ in Brave. This exact origin is required.`); setErrorCode('wrong-origin'); return }
+    if (!/^[a-p]{32}$/.test(extensionId)) { setNotice('Copy the 32-letter Mochi extension ID from brave://extensions in the same Brave profile.'); setErrorCode('invalid-id'); return }
+    if (!canPersist) { setNotice('The connection needs available local storage and safe sharing between tabs.'); setErrorCode('storage'); return }
     if (pet.extensionSync.authorityStartedAt === null && pet.timer) { setNotice('Save or cancel your active focus timer before first connecting.'); return }
     setRequesting(true)
     setLive(null)
+    setVerifiedInfo(null)
     const requestId = crypto.randomUUID(), challenge = crypto.randomUUID()
     try {
       const reply = await callExtension(extensionId, { kind: 'pair-request', requestId, challenge,
         ...(pairing?.extensionId === extensionId ? { resumeEpochId: pairing.epochId } : {}),
       })
       if (reply.kind !== 'pending' || reply.requestId !== requestId) throw new Error('The extension did not accept this connection request.')
+      setVerifiedInfo(reply.extensionInfo)
       setPending({ extensionId, requestId, challenge, expiresAt: Date.now() + 120_000 })
-    } catch (error) { setNotice(errorMessage(error)) }
+    } catch (error) { setNotice(errorMessage(error)); setErrorCode(error instanceof ExtensionConnectionError ? error.code : 'lost'); setVerifiedInfo(null) }
     finally { setRequesting(false) }
   }
 
@@ -82,7 +87,7 @@ export function useExtensionSync({ pet, canPersist, commitSync }: ExtensionSyncP
     let timeout: number | undefined
     async function claim() {
       try {
-        if (Date.now() > pending!.expiresAt) throw new Error('The approval request expired. Request a connection again, then approve it in the Brave extension popup.')
+        if (Date.now() > pending!.expiresAt) throw new ExtensionConnectionError('approval-expired', 'The approval request expired after two minutes. Request a connection again, then approve it in Mochi’s Brave popup.')
         const reply = await callExtension(pending!.extensionId, { kind: 'pair-claim', requestId: pending!.requestId, challenge: pending!.challenge })
         if (cancelled) return
         if (reply.kind === 'pending' && reply.requestId === pending!.requestId) {
@@ -93,10 +98,12 @@ export function useExtensionSync({ pet, canPersist, commitSync }: ExtensionSyncP
         const verified = await finishApproval(reply)
         if (cancelled) return
         setLive(document.hidden ? null : verified)
+        setVerifiedInfo(verified.extensionInfo)
+        setErrorCode(null)
         setNotice('Connection approved. Browser activity is now syncing automatically.')
         setPending(null)
       } catch (error) {
-        if (!cancelled) { setNotice(errorMessage(error)); setPending(null); setLive(null) }
+        if (!cancelled) { setNotice(errorMessage(error)); setErrorCode(error instanceof ExtensionConnectionError ? error.code : 'lost'); setPending(null); setLive(null); setVerifiedInfo(null) }
       }
     }
     void claim()
@@ -120,9 +127,9 @@ export function useExtensionSync({ pet, canPersist, commitSync }: ExtensionSyncP
         if (cancelled) return
         if (reply.kind !== 'snapshot' || reply.epochId !== epochId) throw new Error('This extension connection is no longer active. Reconnect for approval.')
         const verified = await acceptSnapshot(extensionId!, reply)
-        if (!cancelled) { setLive(document.hidden ? null : verified); setNotice('') }
+        if (!cancelled) { setLive(document.hidden ? null : verified); setNotice(''); setErrorCode(null); setVerifiedInfo(reply.extensionInfo) }
       } catch (error) {
-        if (!cancelled) { setLive(null); setNotice(errorMessage(error)) }
+        if (!cancelled) { setLive(null); setNotice(errorMessage(error)); setErrorCode(error instanceof ExtensionConnectionError ? error.code : 'lost'); setVerifiedInfo(null) }
       } finally {
         inFlight = false
         if (!cancelled && !document.hidden) timeout = window.setTimeout(() => void sync(), 5000)
@@ -153,5 +160,6 @@ export function useExtensionSync({ pet, canPersist, commitSync }: ExtensionSyncP
   }, [])
 
   const connected = Boolean(canPersist && !requesting && !pending && live && live.epochId === pairing?.epochId)
-  return { connected, liveStatus: connected ? live!.status : null, pending: Boolean(pending), requesting, notice, connect }
+  return { connected, liveStatus: connected ? live!.status : null, pending: Boolean(pending), requesting, notice, errorCode,
+    extensionInfo: connected || pending ? verifiedInfo : null, connect }
 }

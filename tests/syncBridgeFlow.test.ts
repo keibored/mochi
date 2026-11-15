@@ -16,7 +16,7 @@ test('approved callback transport imports real producer revisions into durable w
   let extensionRecord: Record<string, unknown> = {}
   const events = { addListener: () => undefined }
   const api: ChromeApi = {
-    runtime: { id: extensionId, getURL: (path) => `chrome-extension://${extensionId}/${path}`,
+    runtime: { id: extensionId, getURL: (path) => `chrome-extension://${extensionId}/${path}`, getManifest: () => ({ version: '0.4.0' }),
       onStartup: events, onInstalled: events, onMessage: events, sendMessage: async () => undefined, openOptionsPage: async () => undefined },
     tabs: { query: async () => [{ id: 1, windowId: 1, active: true, incognito: false, url: 'https://developer.mozilla.org/private?q=not-synced', status: 'complete' }],
       onActivated: events, onUpdated: events, onRemoved: events },

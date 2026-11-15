@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { completionTime, remainingMs } from './timer'
 import type { TimerSession } from './timer'
+import { timerPresentation } from './timerPresentation'
 
 export function ActiveTimerNotice({ session, openTools, compact = false }: { session: TimerSession; openTools: () => void; compact?: boolean }) {
   const [now, setNow] = useState(Date.now)
@@ -15,14 +15,12 @@ export function ActiveTimerNotice({ session, openTools, compact = false }: { ses
       document.removeEventListener('visibilitychange', refresh)
     }
   }, [])
-  const complete = completionTime(session, now) !== null
-  const seconds = Math.ceil(remainingMs(session, now) / 1000)
-  const clock = `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`
+  const notice = timerPresentation(session, now)
   return (
     <section className={`active-timer-notice${compact ? ' timer-context-notice' : ''}`} aria-label="Active focus timer">
       <div className={compact ? 'timer-context-copy' : undefined}>
-        <p className={compact ? 'timer-context-state' : undefined} role="status" aria-live="polite" aria-atomic="true">{complete ? 'Focus session complete ♡' : session.runningSince === null ? 'Focus paused' : 'Focus in progress'}</p>
-        <p className={compact ? 'timer-context-clock' : undefined} aria-live="off">{compact && complete ? 'Ready to save' : `${clock} ${compact ? 'left' : 'remaining'}`}</p>
+        <p className={compact ? 'timer-context-state' : undefined} role="status" aria-live="polite" aria-atomic="true">{notice.shortLabel}</p>
+        <p className={compact ? 'timer-context-clock' : undefined} aria-live="off">{compact && notice.kind === 'complete' ? 'Ready to save' : `${notice.clock} ${compact ? 'left' : 'remaining'}`}</p>
       </div>
       <button className="adopt-button secondary-button" type="button" aria-controls="activity-view" onClick={openTools}>View timer</button>
     </section>

@@ -238,7 +238,7 @@ test('a no-op first care tick durably migrates a running timer once without anno
   assert.equal(first.changed, false, 'migration is not an activity-save success')
   assert.deepEqual([first.xpAwarded, first.creditsAwarded], [0, 0])
   assert.equal(writes, 1)
-  assert.equal(JSON.parse(raw).version, 6)
+  assert.equal(JSON.parse(raw).version, 7)
   assert.equal(readPet(baselineAt + minute).care.timerEnergy?.baselineActiveMs, 12 * minute)
   assert.equal(readPet(baselineAt + minute).care.energy, 80)
   await transactPet({ type: 'care-tick', now: baselineAt + minute })

@@ -4,7 +4,7 @@ import { DEFAULT_FOCUS_GOAL, isActivity, isValidGoal } from './rewards.ts'
 import { isTimerSession } from './timer.ts'
 import { areWebsiteRules } from './websiteRules.ts'
 import { freshWebSync, isWebSyncState } from './integration/syncDomain.ts'
-import { isPetCare, migrateCare } from './petCare.ts'
+import { isPetCare, migrateCare, migrateFocusEnergy } from './petCare.ts'
 
 export const STORAGE_KEY = 'mochi.progress'
 export class ProgressValidationError extends Error {}
@@ -14,7 +14,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isPetState(value: unknown): value is PetState {
-  if (!isRecord(value) || value.version !== 6 || typeof value.adopted !== 'boolean' ||
+  if (!isRecord(value) || value.version !== 7 || typeof value.adopted !== 'boolean' ||
       value.name !== 'Mochi' || typeof value.xp !== 'number' || !Number.isSafeInteger(value.xp) || value.xp < 0 ||
       typeof value.foodCredits !== 'number' || !Number.isSafeInteger(value.foodCredits) || value.foodCredits < 0 ||
       typeof value.dailyFocusGoal !== 'number' || !isValidGoal(value.dailyFocusGoal) ||
@@ -33,7 +33,7 @@ export function isPetState(value: unknown): value is PetState {
 
 // Structural migration only: saved balances remain authoritative.
 export function migratePet(value: unknown, now = Date.now()): PetState | null {
-  if (!isRecord(value) || ![1, 2, 3, 4, 5, 6].includes(value.version as number)) return null
+  if (!isRecord(value) || ![1, 2, 3, 4, 5, 6, 7].includes(value.version as number)) return null
   let activities = value.activities
   if (value.version === 1) {
     if (!Array.isArray(activities)) return null
@@ -49,12 +49,14 @@ export function migratePet(value: unknown, now = Date.now()): PetState | null {
   if (!Array.isArray(activities) || !activities.every(isActivity) || !isWebSyncState(extensionSync) ||
       (timer !== null && !isTimerSession(timer))) return null
   let care: unknown = value.care
-  if (value.version !== 6) {
+  if (value.version === 6) {
+    try { care = migrateFocusEnergy(value.care, extensionSync, timer, now) } catch { return null }
+  } else if (value.version !== 7) {
     try { care = migrateCare(activities, extensionSync, timer, now) } catch { return null }
   }
   const candidate = {
     ...value,
-    version: 6,
+    version: 7,
     timer,
     websiteRules: (value.version as number) >= 4 ? value.websiteRules : [],
     extensionSync,
@@ -71,7 +73,7 @@ function readRecord(now = Date.now()): { pet: PetState; needsMigration: boolean 
   const value: unknown = JSON.parse(raw)
   const pet = migratePet(value, now)
   if (!pet) throw new Error('Saved progress could not be read; it has been preserved.')
-  return { pet, needsMigration: isRecord(value) && value.version !== 6 }
+  return { pet, needsMigration: isRecord(value) && value.version !== 7 }
 }
 
 export function readPet(now = Date.now()): PetState {

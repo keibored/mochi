@@ -32,6 +32,7 @@ export interface ChromeApi {
   runtime: {
     id: string
     getURL(path: string): string
+    getManifest(): { version: string }
     onStartup: ChromeEvent<[]>
     onInstalled: ChromeEvent<[{ reason: string }]>
     onMessage: { addListener(listener: (message: unknown, sender: { id?: string; url?: string }, reply: (response: unknown) => void) => boolean): void }

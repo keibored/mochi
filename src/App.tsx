@@ -6,6 +6,7 @@ import { WebsiteRulesSettings } from './WebsiteRulesSettings'
 import { ExtensionConnection, HomeTrackingStatus } from './ExtensionConnection'
 import { useExtensionSync } from './useExtensionSync'
 import { useProgress } from './useProgress'
+import { useTransientFeedback } from './useTransientFeedback'
 import { ACTIVITY_CATEGORIES, FEED_COST, isActivityCategory, isValidDuration, isValidGoal, localDateKey, MAX_NOTE_LENGTH, MIN_FOCUS_GOAL, MAX_FOCUS_GOAL } from './rewards'
 import type { ActivityCategory } from './rewards'
 import { recentActivityView } from './integration/activityView'
@@ -33,7 +34,7 @@ function App() {
   const [goal, setGoal] = useState(String(pet.dailyFocusGoal))
   const [goalError, setGoalError] = useState('')
   const [error, setError] = useState('')
-  const [feedback, setFeedback] = useState('')
+  const [feedback, setFeedback] = useTransientFeedback()
   const [feedingId, setFeedingId] = useState<number | null>(null)
   const [restConfirmTimerId, setRestConfirmTimerId] = useState<string | null>(null)
   const [today, setToday] = useState(() => new Date())
@@ -114,7 +115,7 @@ function App() {
   async function startRest(pauseTimerId?: string) {
     const changed = await dispatch({ type: 'care-rest-start', id: `rest-${crypto.randomUUID()}`, now: Date.now(), ...(pauseTimerId ? { pauseTimerId } : {}) })
     setRestConfirmTimerId(null)
-    setFeedback(changed ? 'Mochi is resting. Each completed 5 minutes restores 5 energy.' : 'Rest did not start. Your timer or care state may have changed in another tab.')
+    setFeedback(changed ? 'Rest started. Each completed 5 minutes restores 5 energy.' : 'Rest did not start. Your timer or care state may have changed in another tab.')
     window.requestAnimationFrame(() => document.getElementById('scene-rest-action')?.focus())
   }
 
@@ -130,7 +131,7 @@ function App() {
   async function wake() {
     if (!pet.care.rest) return
     const changed = await dispatch({ type: 'care-wake', restId: pet.care.rest.id, now: Date.now() })
-    setFeedback(changed ? pet.timer?.runningSince === null ? 'Mochi is awake. Resume your timer whenever you’re ready.' : 'Mochi is awake. One little step at a time.' : 'No change was saved. Review storage and the current care state.')
+    setFeedback(changed ? 'Mochi woke up. Timer controls are in Activity.' : 'No change was saved. Review storage and the current care state.')
   }
 
   const history = recentActivityView(pet.activities, pet.extensionSync, historyLimit + 1)
@@ -182,7 +183,7 @@ function App() {
           <div className="optional-tools-intro"><h2>Other ways to record time</h2></div>
           {browserAuthoritative && <p className="optional-tools-notice">Manual and timer entries stay in history without extra Focus rewards or goal progress, even while disconnected. Manual Rest still counts.</p>}
           <div className="tools-grid">
-            <FocusTimer session={pet.timer} dispatch={dispatch} canPersist={canPersist} busy={busy} resting={pet.care.rest !== null} onWake={() => void wake()} />
+            <FocusTimer session={pet.timer} dispatch={dispatch} canPersist={canPersist} busy={busy} resting={pet.care.rest !== null} onWake={() => void wake()} energyFromBrowser={browserAuthoritative} />
             <section className="panel focus-card" aria-labelledby="manual-heading">
               <div className="card-heading"><h2 id="manual-heading">Log an activity</h2><span className="source-badge">Manual</span></div>
               <p className="help-text">Log time you have already spent.</p>

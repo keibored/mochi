@@ -24,6 +24,13 @@ export interface LeisureDayCare {
   excessRemainderMs: number
 }
 
+export interface FocusEnergyDay {
+  /** Accepted automatic Focus, including policy/rest baselines that cost nothing. */
+  observedMs: number
+  /** Only eligible new Focus contributes to the next completed energy block. */
+  remainderMs: number
+}
+
 export interface RestSession {
   id: string
   startedAt: number
@@ -44,6 +51,9 @@ export interface PetCare {
   /** New/edited policy boundary; ambiguous older aggregates are baselined. */
   policyStartedAt: number
   leisureDays: Record<string, LeisureDayCare>
+  /** Independent of Leisure settings; moved at migration and Rest boundaries. */
+  focusEnergyPolicyAt: number
+  focusEnergyDays: Record<string, FocusEnergyDay>
   rest: RestSession | null
   timerEnergy: TimerEnergyCursor | null
 }
@@ -66,7 +76,26 @@ export function freshCare(now = 0): PetCare {
   if (!isCareTimestamp(now)) throw new RangeError('Invalid care timestamp.')
   return { fullness: DEFAULT_FULLNESS, energy: DEFAULT_ENERGY,
     dailyLeisureAllowance: DEFAULT_LEISURE_ALLOWANCE, policyStartedAt: now,
-    leisureDays: {}, rest: null, timerEnergy: null }
+    leisureDays: {}, focusEnergyPolicyAt: now, focusEnergyDays: {}, rest: null, timerEnergy: null }
+}
+
+function focusBaseline(summaries: readonly SyncSummaryV2[]): Record<string, FocusEnergyDay> {
+  const days: Record<string, FocusEnergyDay> = {}
+  for (const summary of summaries) {
+    if (summary.category !== 'Focus') continue
+    const observedMs = (days[summary.localDate]?.observedMs ?? 0) + summary.activeDurationMs
+    if (!Number.isSafeInteger(observedMs)) throw new RangeError('Historical Focus total is too large.')
+    days[summary.localDate] = { observedMs, remainderMs: 0 }
+  }
+  return days
+}
+
+/** Add automatic accounting without changing any existing care value or cursor. */
+export function migrateFocusEnergy(value: unknown, sync: WebSyncState, timer: TimerSession | null, now: number): PetCare | null {
+  if (!record(value) || !exactKeys(value, ['fullness', 'energy', 'dailyLeisureAllowance', 'policyStartedAt', 'leisureDays', 'rest', 'timerEnergy']) ||
+      !isCareTimestamp(now)) return null
+  const candidate = { ...value, focusEnergyPolicyAt: now, focusEnergyDays: focusBaseline(sync.summaries) }
+  return isPetCare(candidate, timer) ? candidate : null
 }
 
 export function activeTimerMs(timer: TimerSession, now: number): number {
@@ -89,19 +118,26 @@ export function migrateCare(activities: readonly Activity[], sync: WebSyncState,
     baseline(dayKey(at), activity.duration * 60_000)
   }
   for (const summary of sync.summaries) if (summary.category === 'Leisure') baseline(summary.localDate, summary.activeDurationMs)
+  care.focusEnergyDays = focusBaseline(sync.summaries)
   if (timer) care.timerEnergy = { timerId: timer.id, baselineActiveMs: activeTimerMs(timer, now), accountedBlocks: 0 }
   return care
 }
 
 /** Validate persisted counters as well as the relationship with an optional timer. */
 export function isPetCare(value: unknown, timer: TimerSession | null): value is PetCare {
-  if (!record(value) || !exactKeys(value, ['fullness', 'energy', 'dailyLeisureAllowance', 'policyStartedAt', 'leisureDays', 'rest', 'timerEnergy']) ||
+  if (!record(value) || !exactKeys(value, ['fullness', 'energy', 'dailyLeisureAllowance', 'policyStartedAt', 'leisureDays', 'focusEnergyPolicyAt', 'focusEnergyDays', 'rest', 'timerEnergy']) ||
       !isStat(value.fullness) || !isStat(value.energy) || !isValidLeisureAllowance(value.dailyLeisureAllowance) ||
-      !isCareTimestamp(value.policyStartedAt) || !record(value.leisureDays)) return false
+      !isCareTimestamp(value.policyStartedAt) || !record(value.leisureDays) ||
+      !isCareTimestamp(value.focusEnergyPolicyAt) || !record(value.focusEnergyDays)) return false
   for (const [day, ledger] of Object.entries(value.leisureDays)) {
     if (!isDay(day) || !record(ledger) || !exactKeys(ledger, ['observedMs', 'excessRemainderMs']) ||
         !integer(ledger.observedMs) || !integer(ledger.excessRemainderMs) || ledger.excessRemainderMs >= LEISURE_STEP_MS ||
         ledger.excessRemainderMs > ledger.observedMs) return false
+  }
+  for (const [day, ledger] of Object.entries(value.focusEnergyDays)) {
+    if (!isDay(day) || !record(ledger) || !exactKeys(ledger, ['observedMs', 'remainderMs']) ||
+        !integer(ledger.observedMs) || !integer(ledger.remainderMs) || ledger.remainderMs >= FOCUS_ENERGY_STEP_MS ||
+        ledger.remainderMs > ledger.observedMs) return false
   }
   if (value.rest !== null) {
     const rest = value.rest
@@ -173,6 +209,42 @@ export function careForSyncedLeisure(care: PetCare, previous: readonly SyncSumma
   return result
 }
 
+/** Automatic Focus uses active milliseconds, independently of the XP daily cap.
+ * Only accepted cumulative differences are observed; retries cannot debit twice.
+ * Intentional Rest and ambiguous old-boundary snapshots establish baselines.
+ */
+export function careForSyncedFocus(care: PetCare, previous: readonly SyncSummaryV2[], next: readonly SyncSummaryV2[]): PetCare {
+  const accepted = new Map(previous.map((summary) => [summary.eventId, summary]))
+  let result = care
+  for (const summary of next) {
+    if (summary.category !== 'Focus') continue
+    const old = accepted.get(summary.eventId)
+    const delta = summary.activeDurationMs - (old?.activeDurationMs ?? 0)
+    if (delta <= 0) continue
+    const eligible = care.rest === null && (old
+      ? Date.parse(old.endedAtIso) >= care.focusEnergyPolicyAt
+      : Date.parse(summary.startedAtIso) >= care.focusEnergyPolicyAt)
+    const previousDay = result.focusEnergyDays[summary.localDate] ?? { observedMs: 0, remainderMs: 0 }
+    const observedMs = previousDay.observedMs + delta
+    if (!Number.isSafeInteger(observedMs)) throw new RangeError('Focus total is too large.')
+    const accumulated = previousDay.remainderMs + (eligible ? delta : 0)
+    const loss = Math.floor(accumulated / FOCUS_ENERGY_STEP_MS) * ENERGY_PER_FOCUS_STEP
+    result = { ...result, energy: clampCareStat(result.energy - loss), focusEnergyDays: { ...result.focusEnergyDays,
+      [summary.localDate]: { observedMs, remainderMs: accumulated % FOCUS_ENERGY_STEP_MS } } }
+  }
+  return result
+}
+
+/** Discard partial automatic work at explicit sleep/wake boundaries. New buffered
+ * summaries crossing the boundary are baseline-only on their first revision.
+ */
+export function resetFocusEnergyPolicy(care: PetCare, now: number): PetCare {
+  if (!isCareTimestamp(now)) return care
+  return { ...care, focusEnergyPolicyAt: Math.max(care.focusEnergyPolicyAt, now),
+    focusEnergyDays: Object.fromEntries(Object.entries(care.focusEnergyDays).map(([day, ledger]) =>
+      [day, { observedMs: ledger.observedMs, remainderMs: 0 }])) }
+}
+
 /** Editing never charges the past. Already observed allowance use stays used. */
 export function changeLeisureAllowance(care: PetCare, minutes: number, now: number): PetCare {
   if (!isValidLeisureAllowance(minutes) || !isCareTimestamp(now) || minutes === care.dailyLeisureAllowance) return care
@@ -183,14 +255,14 @@ export function changeLeisureAllowance(care: PetCare, minutes: number, now: numb
 }
 
 /** Explicit timestamps make reload, retry and clock rollback safe; no render writes. */
-export function accountCareTime(care: PetCare, timer: TimerSession | null, now: number): PetCare {
+export function accountCareTime(care: PetCare, timer: TimerSession | null, now: number, timerEnergyEligible = true): PetCare {
   if (!isCareTimestamp(now)) return care
   let result = care
   if (timer && care.timerEnergy?.timerId === timer.id) {
     const cursor = care.timerEnergy
     const blocks = Math.max(cursor.accountedBlocks, Math.floor(Math.max(0, activeTimerMs(timer, now) - cursor.baselineActiveMs) / FOCUS_ENERGY_STEP_MS))
     if (blocks > cursor.accountedBlocks) result = { ...result,
-      energy: clampCareStat(result.energy - (blocks - cursor.accountedBlocks) * ENERGY_PER_FOCUS_STEP),
+      energy: timerEnergyEligible ? clampCareStat(result.energy - (blocks - cursor.accountedBlocks) * ENERGY_PER_FOCUS_STEP) : result.energy,
       timerEnergy: { ...cursor, accountedBlocks: blocks } }
   }
   if (care.rest) {
@@ -205,5 +277,5 @@ export function accountCareTime(care: PetCare, timer: TimerSession | null, now: 
 
 export function beginCareRest(care: PetCare, id: string, now: number): PetCare {
   return care.rest || !isRestId(id) || !isCareTimestamp(now) ? care
-    : { ...care, rest: { id, startedAt: now, accountedBlocks: 0 } }
+    : { ...resetFocusEnergyPolicy(care, now), rest: { id, startedAt: now, accountedBlocks: 0 } }
 }
